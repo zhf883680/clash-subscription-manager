@@ -25,7 +25,7 @@ The app reads configuration from `config.yaml` and listens on port `8080` by def
 Build:
 
 ```bash
-docker build -t <your-dockerhub-username>/clash-subscription-manager:latest .
+docker build -t zhf883680/clash-subscription-manager:latest .
 ```
 
 Run:
@@ -33,10 +33,11 @@ Run:
 ```bash
 docker run --rm -p 8080:8080 \
   -v $(pwd)/data:/app/data \
-  <your-dockerhub-username>/clash-subscription-manager:latest
+  zhf883680/clash-subscription-manager:latest
 ```
 
-## Suggested publishing names
+## Project Links
 
-- GitHub repository: `clash-subscription-manager`
-- Docker image: `<your-dockerhub-username>/clash-subscription-manager`
+- **GitHub Repository**: https://github.com/zhf883680/clash-subscription-manager
+- **Docker Hub Image**: https://hub.docker.com/r/zhf883680/clash-subscription-manager
+

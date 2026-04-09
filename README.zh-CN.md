@@ -2,7 +2,7 @@
 
 一个用于管理 Clash 订阅链接和缓存配置文件的小型 Web 应用。
 
-English | **简体中文版**
+**[English Version](README.md)** | 简体中文
 
 ## 功能特性
 
@@ -25,7 +25,7 @@ go run .
 构建镜像：
 
 ```bash
-docker build -t <your-dockerhub-username>/clash-subscription-manager:latest .
+docker build -t zhf883680/clash-subscription-manager:latest .
 ```
 
 运行容器：
@@ -33,10 +33,11 @@ docker build -t <your-dockerhub-username>/clash-subscription-manager:latest .
 ```bash
 docker run --rm -p 8080:8080 \
   -v $(pwd)/data:/app/data \
-  <your-dockerhub-username>/clash-subscription-manager:latest
+  zhf883680/clash-subscription-manager:latest
 ```
 
-## 建议的发布名称
+## 项目链接
 
-- GitHub 仓库：`clash-subscription-manager`
-- Docker 镜像：`<your-dockerhub-username>/clash-subscription-manager`
+- **GitHub 仓库**: https://github.com/zhf883680/clash-subscription-manager
+- **Docker Hub 镜像**: https://hub.docker.com/r/zhf883680/clash-subscription-manager
+
