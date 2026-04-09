@@ -1,0 +1,557 @@
+package handlers
+
+import (
+	"compress/gzip"
+	"encoding/json"
+	"fmt"
+	"html/template"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"clash-subscription-manager/models"
+
+	"github.com/gorilla/mux"
+)
+
+// Response represents a standardized JSON response
+type Response struct {
+	Success bool        `json:"success"`
+	Message string      `json:"message,omitempty"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   string      `json:"error,omitempty"`
+}
+
+// Config represents handler configuration
+type Config struct {
+	DataDir         string
+	MaxFileSize     int64
+	DownloadTimeout time.Duration
+	RateLimit       int
+}
+
+// Handler holds handler dependencies
+type Handler struct {
+	config     *Config
+	httpClient *http.Client
+}
+
+type subscriptionPayload struct {
+	Name           string            `json:"name"`
+	URL            string            `json:"url"`
+	Type           string            `json:"type"`
+	RequestHeaders map[string]string `json:"request_headers"`
+}
+
+// NewHandler creates a new handler instance
+func NewHandler(config *Config) *Handler {
+	return &Handler{
+		config: config,
+		httpClient: &http.Client{
+			Timeout: config.DownloadTimeout,
+		},
+	}
+}
+
+// Middleware
+
+// rateLimit middleware implements basic rate limiting
+func (h *Handler) RateLimit(next http.HandlerFunc) http.HandlerFunc {
+	// Simple in-memory rate limiter
+	type client struct {
+		requests  int
+		lastReset time.Time
+	}
+	clients := make(map[string]*client)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get client IP
+		ip := r.RemoteAddr
+
+		// Initialize or get client record
+		if _, exists := clients[ip]; !exists {
+			clients[ip] = &client{requests: 0, lastReset: time.Now()}
+		}
+
+		// Reset counter if minute has passed
+		if time.Since(clients[ip].lastReset) > time.Minute {
+			clients[ip].requests = 0
+			clients[ip].lastReset = time.Now()
+		}
+
+		// Check rate limit
+		if clients[ip].requests >= h.config.RateLimit {
+			h.respondJSON(w, http.StatusTooManyRequests, Response{
+				Success: false,
+				Error:   "Rate limit exceeded",
+			})
+			return
+		}
+
+		clients[ip].requests++
+		next(w, r)
+	}
+}
+
+// Basic Handlers
+
+// homeHandler serves the main HTML page
+func (h *Handler) HomeHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse template
+	tmplPath, err := resolveTemplatePath("index.html")
+	if err != nil {
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+	tmpl, err := template.ParseFiles(tmplPath)
+	if err != nil {
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to parse template: %v", err),
+		})
+		return
+	}
+
+	// Execute template
+	if err := tmpl.Execute(w, nil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// healthHandler returns health status
+func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
+	h.respondJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"status": "healthy",
+			"time":   time.Now().Unix(),
+		},
+	})
+}
+
+// listSubscriptionsHandler returns all subscriptions
+func (h *Handler) ListSubscriptionsHandler(w http.ResponseWriter, r *http.Request) {
+	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
+
+	subscriptions, err := ListSubscriptions(dataFile)
+	if err != nil {
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to load subscriptions: %v", err),
+		})
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data:    subscriptions,
+	})
+}
+
+// Subscription Management Handlers
+
+// subscribeHandler adds a new subscription
+func (h *Handler) SubscribeHandler(w http.ResponseWriter, r *http.Request) {
+	payload, err := decodeSubscriptionPayload(r)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	// Validate required fields
+	if payload.Name == "" || payload.URL == "" {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   "Name and URL are required",
+		})
+		return
+	}
+
+	sub := models.Subscription{
+		Name:           payload.Name,
+		URL:            payload.URL,
+		Type:           payload.Type,
+		RequestHeaders: payload.RequestHeaders,
+	}
+
+	// Set default values
+	if sub.Type == "" {
+		sub.Type = "unknown"
+	}
+	now := time.Now()
+	sub.CreatedAt = now
+	sub.UpdatedAt = now
+	sub.LastCheck = now
+	sub.Status = "active"
+
+	content, err := h.downloadSubscriptionContent(sub.URL, sub.RequestHeaders)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadGateway, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to download subscription: %v", err),
+		})
+		return
+	}
+
+	filePath, err := h.storeSubscriptionFile(sub.Name, content)
+	if err != nil {
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to store subscription file: %v", err),
+		})
+		return
+	}
+
+	sub.FilePath = filePath
+	sub.FileSize = int64(len(content))
+
+	// Add subscription
+	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
+	addedSub, err := AddSubscription(sub, dataFile)
+	if err != nil {
+		_ = os.Remove(filepath.Join(h.config.DataDir, filePath))
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to add subscription: %v", err),
+		})
+		return
+	}
+
+	h.respondJSON(w, http.StatusCreated, Response{
+		Success: true,
+		Message: "Subscription added successfully",
+		Data:    addedSub,
+	})
+}
+
+// subscriptionHandler handles GET and DELETE for a single subscription
+func (h *Handler) SubscriptionHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
+
+	switch r.Method {
+	case http.MethodGet:
+		h.getSubscription(w, id, dataFile)
+	case http.MethodDelete:
+		h.deleteSubscription(w, id, dataFile)
+	default:
+		h.respondJSON(w, http.StatusMethodNotAllowed, Response{
+			Success: false,
+			Error:   "Method not allowed",
+		})
+	}
+}
+
+// RefreshSubscriptionHandler updates subscription fields and refreshes the cached file.
+func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
+
+	current, err := GetSubscription(id, dataFile)
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Subscription not found: %v", err),
+		})
+		return
+	}
+
+	payload, err := decodeSubscriptionPayload(r)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	name := payload.Name
+	if name == "" {
+		name = current.Name
+	}
+	rawURL := payload.URL
+	if rawURL == "" {
+		rawURL = current.URL
+	}
+	subType := payload.Type
+	if subType == "" {
+		subType = current.Type
+	}
+	requestHeaders := payload.RequestHeaders
+	if requestHeaders == nil {
+		requestHeaders = current.RequestHeaders
+	}
+
+	content, err := h.downloadSubscriptionContent(rawURL, requestHeaders)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadGateway, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to refresh subscription: %v", err),
+		})
+		return
+	}
+
+	filePath := current.FilePath
+	if filePath == "" {
+		filePath, err = h.storeSubscriptionFile(name, content)
+		if err != nil {
+			h.respondJSON(w, http.StatusInternalServerError, Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to store subscription file: %v", err),
+			})
+			return
+		}
+	} else {
+		if err := os.WriteFile(filepath.Join(h.config.DataDir, filePath), content, 0644); err != nil {
+			h.respondJSON(w, http.StatusInternalServerError, Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to update cached file: %v", err),
+			})
+			return
+		}
+	}
+
+	now := time.Now()
+	updatedSub, err := UpdateSubscription(id, dataFile, func(sub *models.Subscription) error {
+		sub.Name = name
+		sub.URL = rawURL
+		sub.Type = subType
+		sub.RequestHeaders = requestHeaders
+		sub.FilePath = filePath
+		sub.FileSize = int64(len(content))
+		sub.UpdatedAt = now
+		sub.LastCheck = now
+		sub.Status = "active"
+		return nil
+	})
+	if err != nil {
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to update subscription: %v", err),
+		})
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, Response{
+		Success: true,
+		Message: "Subscription refreshed successfully",
+		Data:    updatedSub,
+	})
+}
+
+// getSubscription retrieves a single subscription
+func (h *Handler) getSubscription(w http.ResponseWriter, id string, dataFile string) {
+	subscription, err := GetSubscription(id, dataFile)
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Subscription not found: %v", err),
+		})
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data:    subscription,
+	})
+}
+
+// deleteSubscription removes a subscription
+func (h *Handler) deleteSubscription(w http.ResponseWriter, id string, dataFile string) {
+	if err := DeleteSubscription(id, dataFile); err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to delete subscription: %v", err),
+		})
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, Response{
+		Success: true,
+		Message: "Subscription deleted successfully",
+	})
+}
+
+// downloadHandler downloads subscription content
+func (h *Handler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	// Get subscription
+	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
+	subscription, err := GetSubscription(id, dataFile)
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Subscription not found: %v", err),
+		})
+		return
+	}
+
+	if subscription.FilePath == "" {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   "Subscription file is not available",
+		})
+		return
+	}
+
+	filePath := filepath.Join(h.config.DataDir, subscription.FilePath)
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to read subscription file: %v", err),
+		})
+		return
+	}
+
+	contentType := http.DetectContentType(content)
+
+	// Set headers for download
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.yaml\"", sanitizeFilename(subscription.Name)))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+
+	// Write content
+	if _, err := w.Write(content); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// Helper Functions
+
+// respondJSON sends a JSON response
+func (h *Handler) respondJSON(w http.ResponseWriter, status int, data Response) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
+}
+
+func (h *Handler) downloadSubscriptionContent(rawURL string, requestHeaders map[string]string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range requestHeaders {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		req.Header.Set(key, value)
+	}
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download failed with status: %d", resp.StatusCode)
+	}
+
+	if resp.ContentLength > h.config.MaxFileSize {
+		return nil, fmt.Errorf("file too large: %d bytes (max: %d)", resp.ContentLength, h.config.MaxFileSize)
+	}
+
+	reader := io.Reader(resp.Body)
+	if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+		gzipReader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("create gzip reader: %w", err)
+		}
+		defer gzipReader.Close()
+		reader = gzipReader
+	}
+
+	content, err := io.ReadAll(io.LimitReader(reader, h.config.MaxFileSize+1))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(content) == 0 {
+		return nil, fmt.Errorf("downloaded content is empty")
+	}
+	if int64(len(content)) > h.config.MaxFileSize {
+		return nil, fmt.Errorf("file too large: %d bytes (max: %d)", len(content), h.config.MaxFileSize)
+	}
+
+	return content, nil
+}
+
+func (h *Handler) storeSubscriptionFile(name string, content []byte) (string, error) {
+	if err := os.MkdirAll(h.config.DataDir, 0755); err != nil {
+		return "", err
+	}
+
+	fileName := fmt.Sprintf("%s-%s.yaml", sanitizeFilename(name), generateID())
+	filePath := filepath.Join(h.config.DataDir, fileName)
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		return "", err
+	}
+
+	return fileName, nil
+}
+
+var filenameSanitizer = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+func sanitizeFilename(name string) string {
+	sanitized := filenameSanitizer.ReplaceAllString(strings.TrimSpace(name), "-")
+	sanitized = strings.Trim(sanitized, "-.")
+	if sanitized == "" {
+		return "subscription"
+	}
+	return sanitized
+}
+
+func resolveTemplatePath(name string) (string, error) {
+	candidates := []string{
+		filepath.Join("templates", name),
+		filepath.Join("..", "templates", name),
+	}
+
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("template %q not found", name)
+}
+
+func decodeSubscriptionPayload(r *http.Request) (subscriptionPayload, error) {
+	var payload subscriptionPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		return subscriptionPayload{}, err
+	}
+
+	payload.Name = strings.TrimSpace(payload.Name)
+	payload.URL = strings.TrimSpace(payload.URL)
+	payload.Type = strings.TrimSpace(payload.Type)
+	for key, value := range payload.RequestHeaders {
+		trimmedKey := strings.TrimSpace(key)
+		trimmedValue := strings.TrimSpace(value)
+		delete(payload.RequestHeaders, key)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		payload.RequestHeaders[trimmedKey] = trimmedValue
+	}
+
+	return payload, nil
+}

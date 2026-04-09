@@ -1,0 +1,10 @@
+.git
+.gitignore
+.claude
+data
+docs
+README.md
+__debug_bin*
+proxyManage
+proxyManager
+examples/data_usage_example

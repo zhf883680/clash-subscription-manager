@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clash Subscription Manager</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="hero">
+            <p class="eyebrow">Clash Subscription Manager</p>
+            <h1>Clash 订阅管理</h1>
+            <p class="hero-copy">添加、保存、下载你的 Clash 订阅文件，不再重复翻找链接。</p>
+        </header>
+
+        <main class="layout">
+            <section class="panel form-panel">
+                <div class="panel-heading">
+                    <h2>添加订阅</h2>
+                    <p>输入名称和订阅 URL，系统会抓取并缓存配置文件。</p>
+                </div>
+
+                <form id="subscribe-form" class="stack">
+                    <label class="field">
+                        <span>订阅名称</span>
+                        <input type="text" name="name" maxlength="100" placeholder="例如：日本节点合集" required>
+                    </label>
+
+                    <label class="field">
+                        <span>订阅地址</span>
+                        <input type="url" name="url" placeholder="https://example.com/clash.yaml" required>
+                    </label>
+
+                    <label class="field">
+                        <span>类型</span>
+                        <select name="type">
+                            <option value="clash">Clash</option>
+                            <option value="v2ray">V2Ray</option>
+                            <option value="shadowsocks">Shadowsocks</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </label>
+
+                    <label class="field">
+                        <span>自定义请求头</span>
+                        <textarea name="request_headers_text" id="request-headers-input" rows="6" placeholder="每行一个 Key: Value"></textarea>
+                    </label>
+
+                    <button type="submit" id="submit-btn" class="btn btn-primary">添加订阅</button>
+                </form>
+            </section>
+
+            <section class="panel list-panel">
+                <div class="panel-heading">
+                    <h2>订阅列表</h2>
+                    <p>点击“复制下载地址”会把本地缓存文件的下载链接复制到剪贴板。</p>
+                </div>
+
+                <div id="loading" class="loading">正在加载订阅列表...</div>
+                <div id="subscriptions" class="subscription-list"></div>
+                <div id="empty-state" class="empty-state" hidden>
+                    <p>还没有订阅，先添加一个。</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden">
+        <span id="toast-message"></span>
+    </div>
+
+    <div id="edit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+        <div class="modal-card">
+            <div class="modal-heading">
+                <div>
+                    <p class="eyebrow">Refresh Subscription</p>
+                    <h2 id="edit-modal-title">更新订阅</h2>
+                </div>
+                <button type="button" id="close-edit-modal" class="icon-button" aria-label="关闭">×</button>
+            </div>
+
+            <form id="edit-form" class="stack">
+                <input type="hidden" name="id">
+
+                <label class="field">
+                    <span>订阅名称</span>
+                    <input type="text" name="name" maxlength="100" required>
+                </label>
+
+                <label class="field">
+                    <span>订阅地址</span>
+                    <input type="url" name="url" required>
+                </label>
+
+                <label class="field">
+                    <span>类型</span>
+                    <select name="type">
+                        <option value="clash">Clash</option>
+                        <option value="v2ray">V2Ray</option>
+                        <option value="shadowsocks">Shadowsocks</option>
+                        <option value="other">Other</option>
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>自定义请求头</span>
+                    <textarea name="request_headers_text" id="edit-request-headers-input" rows="6" placeholder="每行一个 Key: Value"></textarea>
+                </label>
+
+                <div class="modal-actions">
+                    <button type="button" id="cancel-edit-modal" class="btn btn-secondary">取消</button>
+                    <button type="submit" id="edit-submit-btn" class="btn btn-primary">保存并更新</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

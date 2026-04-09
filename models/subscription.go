@@ -1,0 +1,27 @@
+package models
+
+import "time"
+
+// Subscription represents a proxy subscription
+type Subscription struct {
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	URL            string            `json:"url"`
+	Type           string            `json:"type"`
+	RequestHeaders map[string]string `json:"request_headers,omitempty"`
+	FilePath       string            `json:"file_path,omitempty"`
+	FileSize       int64             `json:"file_size,omitempty"`
+	CreatedAt      time.Time         `json:"created_at,omitempty"`
+	UpdatedAt      time.Time         `json:"updated_at"`
+	LastCheck      time.Time         `json:"last_check"`
+	Status         string            `json:"status"`
+	NodeCount      int               `json:"node_count"`
+	Traffic        Traffic           `json:"traffic"`
+}
+
+// Traffic represents traffic statistics
+type Traffic struct {
+	Total    int64 `json:"total"`
+	Upload   int64 `json:"upload"`
+	Download int64 `json:"download"`
+}
