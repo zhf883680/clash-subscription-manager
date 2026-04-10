@@ -35,3 +35,29 @@ jobs:
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Set up Go
+        if: matrix.target == 'binary'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Build binary
+        if: matrix.target == 'binary'
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          VERSION=${VERSION#refs/tags/}
+          VERSION=${VERSION#v}
+
+          OUTPUT_NAME=clash-subscription-manager-${{ matrix.goos }}-${{ matrix.goarch }}
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            OUTPUT_NAME="${OUTPUT_NAME}.exe"
+          fi
+
+          echo "Building $OUTPUT_NAME version $VERSION"
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -ldflags="-s -w -X main.Version=$VERSION" \
+            -o $OUTPUT_NAME .
+
+          chmod +x $OUTPUT_NAME || true
