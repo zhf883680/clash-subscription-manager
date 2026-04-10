@@ -4,16 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"clash-subscription-manager/models"
 
 	"github.com/gorilla/mux"
+	"gopkg.in/yaml.v3"
 )
 
 type templatePayload struct {
@@ -132,7 +136,21 @@ func (h *Handler) RenderTemplateHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.writeRenderedTemplate(w, r, item)
+	h.writeRenderedTemplate(w, r, item, templateRenderModeProviders)
+}
+
+func (h *Handler) RenderTemplateProxiesHandler(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	item, err := GetTemplate(id, filepath.Join(h.config.DataDir, "templates.json"))
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Template not found: %v", err),
+		})
+		return
+	}
+
+	h.writeRenderedTemplate(w, r, item, templateRenderModeProxies)
 }
 
 func (h *Handler) RenderDefaultTemplateHandler(w http.ResponseWriter, r *http.Request) {
@@ -145,7 +163,20 @@ func (h *Handler) RenderDefaultTemplateHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	h.writeRenderedTemplate(w, r, item)
+	h.writeRenderedTemplate(w, r, item, templateRenderModeProviders)
+}
+
+func (h *Handler) RenderDefaultTemplateProxiesHandler(w http.ResponseWriter, r *http.Request) {
+	item, err := GetDefaultTemplate(filepath.Join(h.config.DataDir, "templates.json"))
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Default template not found: %v", err),
+		})
+		return
+	}
+
+	h.writeRenderedTemplate(w, r, item, templateRenderModeProxies)
 }
 
 func (h *Handler) createTemplate(w http.ResponseWriter, r *http.Request) {
@@ -178,8 +209,8 @@ func (h *Handler) createTemplate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) writeRenderedTemplate(w http.ResponseWriter, r *http.Request, item *models.Template) {
-	rendered, err := h.renderTemplateContent(r, item.Content)
+func (h *Handler) writeRenderedTemplate(w http.ResponseWriter, r *http.Request, item *models.Template, mode templateRenderMode) {
+	rendered, err := h.renderTemplateContent(r, item.Content, mode)
 	if err != nil {
 		h.respondJSON(w, http.StatusBadRequest, Response{
 			Success: false,
@@ -193,14 +224,40 @@ func (h *Handler) writeRenderedTemplate(w http.ResponseWriter, r *http.Request, 
 	_, _ = w.Write(rendered)
 }
 
-func (h *Handler) renderTemplateContent(r *http.Request, raw string) ([]byte, error) {
+type templateRenderMode string
+
+const (
+	templateRenderModeProviders templateRenderMode = "providers"
+	templateRenderModeProxies   templateRenderMode = "proxies"
+)
+
+func (h *Handler) renderTemplateContent(r *http.Request, raw string, mode templateRenderMode) ([]byte, error) {
 	subscriptions, err := ListSubscriptions(filepath.Join(h.config.DataDir, "subscriptions.json"))
 	if err != nil {
 		return nil, fmt.Errorf("load subscriptions: %w", err)
 	}
 
-	rendered := replaceProxyProvidersSection(raw, renderProxyProvidersBlock(h.buildTemplateProviders(r, subscriptions)))
+	var rendered string
+	switch mode {
+	case templateRenderModeProxies:
+		proxiesBlock, err := h.renderExpandedProxiesBlock(subscriptions)
+		if err != nil {
+			return nil, err
+		}
+		rendered = replaceYAMLSection(raw, "proxy-providers", "")
+		rendered = replaceYAMLSection(rendered, "proxies", proxiesBlock)
+	default:
+		rendered = replaceYAMLSection(raw, "proxy-providers", renderProxyProvidersBlock(h.buildTemplateProviders(r, subscriptions)))
+	}
 	return []byte(rendered), nil
+}
+
+func (h *Handler) renderExpandedProxiesBlock(subscriptions []models.Subscription) (string, error) {
+	proxies, err := h.collectFilteredProxyNodes(subscriptions)
+	if err != nil {
+		return "", err
+	}
+	return renderProxiesBlock(proxies)
 }
 
 func (h *Handler) buildTemplateProviders(r *http.Request, subscriptions []models.Subscription) []templateProvider {
@@ -273,13 +330,33 @@ func renderProxyProvidersBlock(providers []templateProvider) string {
 	return builder.String()
 }
 
-func replaceProxyProvidersSection(raw string, block string) string {
+func renderProxiesBlock(proxies []*yaml.Node) (string, error) {
+	root := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "proxies"},
+			{Kind: yaml.SequenceNode, Tag: "!!seq", Content: proxies},
+		},
+	}
+
+	out, err := yaml.Marshal(root)
+	if err != nil {
+		return "", fmt.Errorf("marshal proxies: %w", err)
+	}
+	return decodeYAMLUnicodeEscapes(string(out)), nil
+}
+
+func replaceYAMLSection(raw string, key string, block string) string {
 	lines := strings.Split(raw, "\n")
 	start := -1
 	end := len(lines)
 	for index, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "proxy-providers:" || strings.HasPrefix(trimmed, "proxy-providers: ") {
+		keyPrefix := key + ":"
+		if !isTopLevelSectionLine(line) {
+			continue
+		}
+		if trimmed == keyPrefix || strings.HasPrefix(trimmed, keyPrefix+" ") {
 			start = index
 			for next := index + 1; next < len(lines); next++ {
 				nextTrimmed := strings.TrimSpace(lines[next])
@@ -295,8 +372,11 @@ func replaceProxyProvidersSection(raw string, block string) string {
 		}
 	}
 
-	block = strings.TrimRight(block, "\n") + "\n"
 	if start == -1 {
+		if strings.TrimSpace(block) == "" {
+			return strings.TrimRight(raw, "\n")
+		}
+		block = strings.TrimRight(block, "\n") + "\n"
 		trimmed := strings.TrimRight(raw, "\n")
 		if trimmed == "" {
 			return strings.TrimRight(block, "\n")
@@ -306,6 +386,16 @@ func replaceProxyProvidersSection(raw string, block string) string {
 
 	before := strings.Join(lines[:start], "\n")
 	after := strings.Join(lines[end:], "\n")
+	if strings.TrimSpace(block) == "" {
+		if strings.TrimSpace(after) == "" {
+			return strings.TrimRight(before, "\n")
+		}
+		if strings.TrimSpace(before) == "" {
+			return strings.TrimLeft(after, "\n")
+		}
+		return strings.TrimRight(before, "\n") + "\n" + strings.TrimLeft(after, "\n")
+	}
+	block = strings.TrimRight(block, "\n") + "\n"
 	if strings.TrimSpace(after) == "" {
 		return strings.TrimRight(before, "\n") + "\n" + block
 	}
@@ -317,6 +407,10 @@ func replaceProxyProvidersSection(raw string, block string) string {
 
 func startsWithIndent(line string) bool {
 	return strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
+}
+
+func isTopLevelSectionLine(line string) bool {
+	return !startsWithIndent(line)
 }
 
 func renderYAMLKey(value string) string {
@@ -339,6 +433,7 @@ func renderQuotedScalar(value string) string {
 }
 
 var yamlPlainSafePattern = regexp.MustCompile(`^[\p{L}\p{N}_./:@%+\-| ]+$`)
+var yamlUnicodeEscapePattern = regexp.MustCompile(`\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4}`)
 
 func absoluteDownloadURL(r *http.Request, id string) string {
 	return fmt.Sprintf("%s://%s/download/%s", requestScheme(r), r.Host, id)
@@ -373,6 +468,110 @@ func sanitizeProviderLabel(name string) string {
 		return "provider"
 	}
 	return strings.Join(fields, " ")
+}
+
+func (h *Handler) collectFilteredProxyNodes(subscriptions []models.Subscription) ([]*yaml.Node, error) {
+	var proxies []*yaml.Node
+	for _, subscription := range subscriptions {
+		filter := strings.TrimSpace(subscription.Filter)
+		if subscription.FilePath == "" || filter == "" {
+			continue
+		}
+
+		matcher, err := regexp.Compile(filter)
+		if err != nil {
+			return nil, fmt.Errorf("compile filter for subscription %q: %w", subscription.Name, err)
+		}
+
+		filePath := filepath.Join(h.config.DataDir, subscription.FilePath)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("read subscription file for %q: %w", subscription.Name, err)
+		}
+
+		items, err := extractMatchingProxies(data, matcher)
+		if err != nil {
+			return nil, fmt.Errorf("extract proxies for %q: %w", subscription.Name, err)
+		}
+		proxies = append(proxies, items...)
+	}
+	return proxies, nil
+}
+
+func extractMatchingProxies(data []byte, matcher *regexp.Regexp) ([]*yaml.Node, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse subscription yaml: %w", err)
+	}
+
+	root := doc.Content
+	if len(root) == 0 || root[0] == nil || root[0].Kind != yaml.MappingNode {
+		return nil, nil
+	}
+
+	proxiesNode := findMappingValue(root[0], "proxies")
+	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
+		return nil, nil
+	}
+
+	matches := make([]*yaml.Node, 0, len(proxiesNode.Content))
+	for _, proxyNode := range proxiesNode.Content {
+		name := findProxyName(proxyNode)
+		if name == "" || !matcher.MatchString(name) {
+			continue
+		}
+		matches = append(matches, cloneYAMLNode(proxyNode))
+	}
+	return matches, nil
+}
+
+func findMappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for index := 0; index+1 < len(node.Content); index += 2 {
+		if node.Content[index].Value == key {
+			return node.Content[index+1]
+		}
+	}
+	return nil
+}
+
+func findProxyName(node *yaml.Node) string {
+	valueNode := findMappingValue(node, "name")
+	if valueNode == nil {
+		return ""
+	}
+	return strings.TrimSpace(valueNode.Value)
+}
+
+func cloneYAMLNode(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	cloned := *node
+	if len(node.Content) > 0 {
+		cloned.Content = make([]*yaml.Node, len(node.Content))
+		for index, child := range node.Content {
+			cloned.Content[index] = cloneYAMLNode(child)
+		}
+	}
+	return &cloned
+}
+
+func decodeYAMLUnicodeEscapes(value string) string {
+	return yamlUnicodeEscapePattern.ReplaceAllStringFunc(value, func(match string) string {
+		hex := match[2:]
+		codePoint, err := strconv.ParseInt(hex, 16, 32)
+		if err != nil {
+			return match
+		}
+		r := rune(codePoint)
+		if !utf8.ValidRune(r) {
+			return match
+		}
+		return string(r)
+	})
 }
 
 func decodeTemplatePayload(r *http.Request) (templatePayload, error) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -285,6 +286,313 @@ proxy-providers:
 	}
 	if strings.Contains(body, "stale:") {
 		t.Fatalf("body should replace stale proxy-providers section: %s", body)
+	}
+}
+
+func TestRenderTemplateProxiesHandlerExpandsFilteredSubscriptionProxies(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-hk",
+			Name:      "HK",
+			URL:       "https://example.com/hk",
+			Filter:    "(?i)港|hk|hongkong|hong kong",
+			FilePath:  "hk.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+		{
+			ID:        "sub-sg",
+			Name:      "SG",
+			URL:       "https://example.com/sg",
+			Filter:    "(?i)新加坡|singapore|sg",
+			FilePath:  "sg.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json")); err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	writeTemplateTestFile(t, filepath.Join(dataDir, "hk.yaml"), []byte(strings.TrimSpace(`
+proxies:
+  - { name: "HK 01", type: ss, server: hk1.example.com, port: 443, cipher: aes-128-gcm, password: secret }
+  - { name: "US 01", type: ss, server: us1.example.com, port: 443, cipher: aes-128-gcm, password: secret }
+`)+"\n"))
+	writeTemplateTestFile(t, filepath.Join(dataDir, "sg.yaml"), []byte(strings.TrimSpace(`
+proxies:
+  - { name: "Singapore 01", type: ss, server: sg1.example.com, port: 443, cipher: aes-128-gcm, password: secret }
+  - { name: "Japan 01", type: ss, server: jp1.example.com, port: 443, cipher: aes-128-gcm, password: secret }
+`)+"\n"))
+
+	templateRecord, err := AddTemplate(models.Template{
+		Name: "expanded",
+		Content: strings.TrimSpace(`
+proxy-providers:
+  old:
+    type: http
+proxies:
+  - { name: OLD, type: direct }
+proxy-groups:
+  - {
+      name: 🚀 手动切换,
+      type: select,
+      proxies: [HK 01, Singapore 01],
+    }
+rules:
+  - MATCH,🚀 手动切换
+`) + "\n",
+		UpdatedAt: time.Now(),
+		IsDefault: true,
+	}, filepath.Join(dataDir, "templates.json"))
+	if err != nil {
+		t.Fatalf("AddTemplate() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     4096,
+		DownloadTimeout: 0,
+		RateLimit:       10,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/templates/"+templateRecord.ID+"/render-proxies", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": templateRecord.ID})
+	rec := httptest.NewRecorder()
+
+	handler.RenderTemplateProxiesHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	body := rec.Body.String()
+	if strings.Contains(body, "proxy-providers:") {
+		t.Fatalf("body should not contain proxy-providers section in proxies mode: %s", body)
+	}
+	if !strings.Contains(body, "proxies:") {
+		t.Fatalf("body missing proxies section: %s", body)
+	}
+	if !strings.Contains(body, `name: "HK 01"`) && !strings.Contains(body, "name: HK 01") {
+		t.Fatalf("body missing matched HK proxy: %s", body)
+	}
+	if !strings.Contains(body, `name: "Singapore 01"`) && !strings.Contains(body, "name: Singapore 01") {
+		t.Fatalf("body missing matched SG proxy: %s", body)
+	}
+	if strings.Contains(body, "US 01") || strings.Contains(body, "Japan 01") || strings.Contains(body, "name: OLD") {
+		t.Fatalf("body should only include filtered proxies: %s", body)
+	}
+	if !strings.Contains(body, "- MATCH,🚀 手动切换") {
+		t.Fatalf("body should preserve non-proxies template content: %s", body)
+	}
+}
+
+func TestRenderDefaultTemplateProxiesHandlerUsesDefaultTemplate(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-hk",
+			Name:      "HK",
+			URL:       "https://example.com/hk",
+			Filter:    "(?i)hk",
+			FilePath:  "hk.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json")); err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	writeTemplateTestFile(t, filepath.Join(dataDir, "hk.yaml"), []byte("proxies:\n  - { name: HK 02, type: direct }\n"))
+
+	if _, err := AddTemplate(models.Template{
+		Name: "default-expanded",
+		Content: strings.TrimSpace(`
+proxy-providers: {}
+rules:
+  - MATCH,DIRECT
+`) + "\n",
+		UpdatedAt: time.Now(),
+		IsDefault: true,
+	}, filepath.Join(dataDir, "templates.json")); err != nil {
+		t.Fatalf("AddTemplate() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     4096,
+		DownloadTimeout: 0,
+		RateLimit:       10,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/templates/default/render-proxies", nil)
+	rec := httptest.NewRecorder()
+
+	handler.RenderDefaultTemplateProxiesHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "HK 02") {
+		t.Fatalf("body missing proxy from default template render-proxies: %s", rec.Body.String())
+	}
+}
+
+func TestRenderTemplateProxiesHandlerReplacesTopLevelProxiesOnly(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-hk",
+			Name:      "HK",
+			URL:       "https://example.com/hk",
+			Filter:    "(?i)香港|hk",
+			FilePath:  "hk.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json")); err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	writeTemplateTestFile(t, filepath.Join(dataDir, "hk.yaml"), []byte(strings.TrimSpace(`
+proxies:
+  - { name: "香港实验性 IEPL 专线 1", type: trojan, server: hk.example.com, port: 443, password: secret, sni: m.ctrip.com, udp: true }
+`) + "\n"))
+
+	templateRecord, err := AddTemplate(models.Template{
+		Name: "top-level-proxies",
+		Content: strings.TrimSpace(`
+proxy-groups:
+  - {
+      name: 🚀 手动切换,
+      type: select,
+      interval: 300,
+      proxies: [DIRECT],
+    }
+proxies:
+  - { name: OLD, type: direct }
+rule-providers:
+  AWAvenue-Ads:
+    type: http
+rules:
+  - MATCH,🚀 手动切换
+`) + "\n",
+		UpdatedAt: time.Now(),
+		IsDefault: true,
+	}, filepath.Join(dataDir, "templates.json"))
+	if err != nil {
+		t.Fatalf("AddTemplate() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     4096,
+		DownloadTimeout: 0,
+		RateLimit:       10,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/templates/"+templateRecord.ID+"/render-proxies", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": templateRecord.ID})
+	rec := httptest.NewRecorder()
+
+	handler.RenderTemplateProxiesHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "interval: 300,") {
+		t.Fatalf("body should preserve proxy-group flow content: %s", body)
+	}
+	if !strings.Contains(body, "proxies: [DIRECT]") {
+		t.Fatalf("body should preserve nested proxy-group proxies list: %s", body)
+	}
+	if !strings.Contains(body, "rule-providers:") || !strings.Contains(body, "AWAvenue-Ads:") {
+		t.Fatalf("body should preserve following top-level sections: %s", body)
+	}
+	if strings.Contains(body, "name: OLD") {
+		t.Fatalf("body should replace only the top-level proxies section: %s", body)
+	}
+	if !strings.Contains(body, "香港实验性 IEPL 专线 1") {
+		t.Fatalf("body should include expanded proxy in top-level proxies section: %s", body)
+	}
+}
+
+func TestRenderTemplateProxiesHandlerKeepsEmojiAsUTF8Characters(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-hk",
+			Name:      "HK",
+			URL:       "https://example.com/hk",
+			Filter:    "(?i)香港|hk",
+			FilePath:  "hk.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json")); err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	writeTemplateTestFile(t, filepath.Join(dataDir, "hk.yaml"), []byte(strings.TrimSpace(`
+proxies:
+  - { name: "🇭🇰 香港实验性 IEPL 专线 1", type: trojan, server: hk.example.com, port: 443, password: secret, sni: m.ctrip.com, udp: true }
+`) + "\n"))
+
+	templateRecord, err := AddTemplate(models.Template{
+		Name: "emoji-expanded",
+		Content: strings.TrimSpace(`
+proxies: []
+rules:
+  - MATCH,DIRECT
+`) + "\n",
+		UpdatedAt: time.Now(),
+		IsDefault: true,
+	}, filepath.Join(dataDir, "templates.json"))
+	if err != nil {
+		t.Fatalf("AddTemplate() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     4096,
+		DownloadTimeout: 0,
+		RateLimit:       10,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/templates/"+templateRecord.ID+"/render-proxies", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": templateRecord.ID})
+	rec := httptest.NewRecorder()
+
+	handler.RenderTemplateProxiesHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	body := rec.Body.String()
+	if strings.Contains(body, `\U0001F1ED\U0001F1F0`) {
+		t.Fatalf("body should contain emoji characters instead of unicode escapes: %s", body)
+	}
+	if !strings.Contains(body, "🇭🇰 香港实验性 IEPL 专线 1") {
+		t.Fatalf("body should preserve emoji characters in expanded proxies mode: %s", body)
+	}
+}
+
+func writeTemplateTestFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v", path, err)
 	}
 }
 

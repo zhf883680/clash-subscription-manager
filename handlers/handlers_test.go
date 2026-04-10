@@ -164,6 +164,12 @@ func TestHomeHandlerRendersStaticAssetLinks(t *testing.T) {
 	if !strings.Contains(body, `自定义请求头`) {
 		t.Fatalf("body missing request headers wording: %s", body)
 	}
+	if strings.Contains(body, `复制默认模板地址`) {
+		t.Fatalf("body should not contain default template copy button: %s", body)
+	}
+	if strings.Contains(body, `复制默认全节点地址`) {
+		t.Fatalf("body should not contain default expanded template copy button: %s", body)
+	}
 	if strings.Contains(body, `x-auth-token`) {
 		t.Fatalf("body should not contain x-auth-token template: %s", body)
 	}

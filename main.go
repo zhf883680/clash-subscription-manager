@@ -118,9 +118,11 @@ func newRouter(cfg *handlers.Config) http.Handler {
 	api.HandleFunc("/templates", h.ListTemplatesHandler).Methods(http.MethodGet)
 	api.HandleFunc("/templates", h.TemplatesHandler).Methods(http.MethodPost)
 	api.HandleFunc("/templates/default/render", h.RenderDefaultTemplateHandler).Methods(http.MethodGet)
+	api.HandleFunc("/templates/default/render-proxies", h.RenderDefaultTemplateProxiesHandler).Methods(http.MethodGet)
 	api.HandleFunc("/templates/{id}", h.TemplateHandler).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
 	api.HandleFunc("/templates/{id}/default", h.SetDefaultTemplateHandler).Methods(http.MethodPost)
 	api.HandleFunc("/templates/{id}/render", h.RenderTemplateHandler).Methods(http.MethodGet)
+	api.HandleFunc("/templates/{id}/render-proxies", h.RenderTemplateProxiesHandler).Methods(http.MethodGet)
 
 	router.HandleFunc("/download/{id}", h.RateLimit(h.DownloadHandler)).Methods(http.MethodGet)
 	router.HandleFunc("/health", h.HealthHandler).Methods(http.MethodGet)

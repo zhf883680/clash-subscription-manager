@@ -128,7 +128,7 @@ const templateContentInput = document.getElementById("template-content-input");
 const templateSubmitButton = document.getElementById("template-submit-btn");
 const templateSetDefaultButton = document.getElementById("template-set-default-btn");
 const copyTemplateURLButton = document.getElementById("copy-template-url-btn");
-const copyDefaultTemplateURLButton = document.getElementById("copy-default-template-url-btn");
+const copyExpandedTemplateURLButton = document.getElementById("copy-expanded-template-url-btn");
 const deleteTemplateButton = document.getElementById("delete-template-btn");
 const newTemplateButton = document.getElementById("new-template-btn");
 const templatesContainer = document.getElementById("templates");
@@ -302,8 +302,13 @@ copyTemplateURLButton.addEventListener("click", async () => {
   await copyAbsoluteURL(`${API_BASE}/templates/${encodeURIComponent(currentID)}/render`, "模板下载地址已复制到剪贴板");
 });
 
-copyDefaultTemplateURLButton.addEventListener("click", async () => {
-  await copyAbsoluteURL(`${API_BASE}/templates/default/render`, "默认模板地址已复制到剪贴板");
+copyExpandedTemplateURLButton.addEventListener("click", async () => {
+  const currentID = templateForm.elements.id.value;
+  if (!currentID) {
+    showToast("请先选择一个模板", "error");
+    return;
+  }
+  await copyAbsoluteURL(`${API_BASE}/templates/${encodeURIComponent(currentID)}/render-proxies`, "全节点模板地址已复制到剪贴板");
 });
 
 newTemplateButton.addEventListener("click", () => {
