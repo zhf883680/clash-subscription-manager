@@ -76,6 +76,7 @@ func TestRenderTemplateHandlerInjectsCurrentSubscriptionsAsProxyProviders(t *tes
 			ID:        "sub-west",
 			Name:      "🛫 West",
 			URL:       "https://example.com/west",
+			Filter:    "(?i)港|hk|hongkong|hong kong",
 			FilePath:  "west-source.yaml",
 			Type:      "clash",
 			UpdatedAt: time.Now(),
@@ -153,8 +154,14 @@ rules:
 	if !strings.Contains(body, "path: ./proxies/west-source.yaml") {
 		t.Fatalf("body missing current file path: %s", body)
 	}
+	if !strings.Contains(body, `filter: "(?i)港|hk|hongkong|hong kong"`) {
+		t.Fatalf("body missing provider filter: %s", body)
+	}
 	if !strings.Contains(body, "\"AI Select |\"") {
 		t.Fatalf("body missing second provider prefix: %s", body)
+	}
+	if strings.Contains(body, "ai-source.yaml\n    filter:") {
+		t.Fatalf("body should omit empty filter field: %s", body)
 	}
 }
 

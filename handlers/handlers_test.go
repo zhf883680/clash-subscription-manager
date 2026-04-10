@@ -36,7 +36,7 @@ func TestSubscribeHandlerDownloadsAndStoresSubscriptionFile(t *testing.T) {
 		}),
 	}
 
-	body := bytes.NewBufferString(`{"name":"demo","url":"https://example.com/subscription","request_headers":{"User-Agent":"custom-agent","X-Test-Header":"abc123"}}`)
+	body := bytes.NewBufferString(`{"name":"demo","url":"https://example.com/subscription","filter":"(?i)港|hk|hongkong|hong kong","request_headers":{"User-Agent":"custom-agent","X-Test-Header":"abc123"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/subscribe", body)
 	rec := httptest.NewRecorder()
 
@@ -88,6 +88,9 @@ func TestSubscribeHandlerDownloadsAndStoresSubscriptionFile(t *testing.T) {
 	}
 	if got := subs[0].RequestHeaders["X-Test-Header"]; got != "abc123" {
 		t.Fatalf("saved request header = %q, want %q", got, "abc123")
+	}
+	if got := subs[0].Filter; got != "(?i)港|hk|hongkong|hong kong" {
+		t.Fatalf("saved filter = %q, want %q", got, "(?i)港|hk|hongkong|hong kong")
 	}
 }
 
@@ -177,6 +180,7 @@ func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 			ID:       "sub-1",
 			Name:     "before",
 			URL:      "https://example.com/old",
+			Filter:   "旧规则",
 			Type:     "clash",
 			FilePath: cachedName,
 			FileSize: int64(len("old-content")),
@@ -209,7 +213,7 @@ func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 		}),
 	}
 
-	body := bytes.NewBufferString(`{"name":"after","url":"https://example.com/new","request_headers":{"User-Agent":"after-agent","X-Refresh-Key":"new-token"}}`)
+	body := bytes.NewBufferString(`{"name":"after","url":"https://example.com/new","filter":"(?i)港|hk|hongkong|hong kong","request_headers":{"User-Agent":"after-agent","X-Refresh-Key":"new-token"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/subscribe/sub-1/refresh", body)
 	req = mux.SetURLVars(req, map[string]string{"id": "sub-1"})
 	rec := httptest.NewRecorder()
@@ -249,6 +253,9 @@ func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 	}
 	if sub.RequestHeaders["User-Agent"] != "after-agent" {
 		t.Fatalf("request header User-Agent = %q, want %q", sub.RequestHeaders["User-Agent"], "after-agent")
+	}
+	if sub.Filter != "(?i)港|hk|hongkong|hong kong" {
+		t.Fatalf("filter = %q, want %q", sub.Filter, "(?i)港|hk|hongkong|hong kong")
 	}
 }
 

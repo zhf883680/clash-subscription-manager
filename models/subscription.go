@@ -7,6 +7,7 @@ type Subscription struct {
 	ID             string            `json:"id"`
 	Name           string            `json:"name"`
 	URL            string            `json:"url"`
+	Filter         string            `json:"filter,omitempty"`
 	Type           string            `json:"type"`
 	RequestHeaders map[string]string `json:"request_headers,omitempty"`
 	FilePath       string            `json:"file_path,omitempty"`

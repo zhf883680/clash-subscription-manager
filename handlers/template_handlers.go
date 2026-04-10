@@ -217,6 +217,7 @@ func (h *Handler) buildTemplateProviders(r *http.Request, subscriptions []models
 			Name:             subscription.Name,
 			URL:              absoluteDownloadURL(r, subscription.ID),
 			Path:             "./proxies/" + path.Base(fileName),
+			Filter:           strings.TrimSpace(subscription.Filter),
 			AdditionalPrefix: sanitizeProviderLabel(subscription.Name) + " |",
 		})
 	}
@@ -227,6 +228,7 @@ type templateProvider struct {
 	Name             string
 	URL              string
 	Path             string
+	Filter           string
 	AdditionalPrefix string
 }
 
@@ -252,6 +254,11 @@ func renderProxyProvidersBlock(providers []templateProvider) string {
 		builder.WriteString("    path: ")
 		builder.WriteString(renderPlainScalar(provider.Path))
 		builder.WriteString("\n")
+		if provider.Filter != "" {
+			builder.WriteString("    filter: ")
+			builder.WriteString(renderQuotedScalar(provider.Filter))
+			builder.WriteString("\n")
+		}
 		builder.WriteString("    interval: 86400\n")
 		builder.WriteString("    health-check:\n")
 		builder.WriteString("      enable: true\n")

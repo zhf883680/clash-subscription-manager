@@ -460,6 +460,7 @@ function renderSubscriptions(subscriptions) {
             <div><strong>最近更新：</strong>${formatDate(subscription.updated_at)}</div>
             <div><strong>文件大小：</strong>${formatFileSize(subscription.file_size || 0)}</div>
             <div><strong>请求头：</strong>${headerCount} 项</div>
+            <div><strong>Filter：</strong>${escapeHtml(subscription.filter || "未设置")}</div>
           </div>
           <div class="subscription-actions">
             <button class="btn btn-secondary" data-action="copy-download-url" data-id="${escapeHtml(subscription.id)}">复制下载地址</button>
@@ -507,6 +508,7 @@ function openEditModal(id) {
   editForm.elements.name.value = subscription.name || "";
   editForm.elements.url.value = subscription.url || "";
   editForm.elements.type.value = subscription.type || "clash";
+  editForm.elements.filter.value = subscription.filter || "";
   editRequestHeadersInput.value = stringifyHeaders(subscription.request_headers || {});
   editModal.classList.remove("hidden");
 }
@@ -545,6 +547,7 @@ function buildSubscriptionPayload(targetForm) {
   const formData = new FormData(targetForm);
   const name = String(formData.get("name") || "").trim();
   const url = String(formData.get("url") || "").trim();
+  const filter = String(formData.get("filter") || "").trim();
   const type = String(formData.get("type") || "").trim();
   const requestHeadersText = String(formData.get("request_headers_text") || "");
 
@@ -561,7 +564,7 @@ function buildSubscriptionPayload(targetForm) {
     return null;
   }
 
-  return { name, url, type, request_headers: requestHeaders };
+  return { name, url, filter, type, request_headers: requestHeaders };
 }
 
 function buildTemplatePayload() {

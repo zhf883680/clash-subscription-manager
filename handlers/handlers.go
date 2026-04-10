@@ -43,6 +43,7 @@ type Handler struct {
 type subscriptionPayload struct {
 	Name           string            `json:"name"`
 	URL            string            `json:"url"`
+	Filter         string            `json:"filter"`
 	Type           string            `json:"type"`
 	RequestHeaders map[string]string `json:"request_headers"`
 }
@@ -180,6 +181,7 @@ func (h *Handler) SubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	sub := models.Subscription{
 		Name:           payload.Name,
 		URL:            payload.URL,
+		Filter:         payload.Filter,
 		Type:           payload.Type,
 		RequestHeaders: payload.RequestHeaders,
 	}
@@ -290,6 +292,7 @@ func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Requ
 	if subType == "" {
 		subType = current.Type
 	}
+	filter := payload.Filter
 	requestHeaders := payload.RequestHeaders
 	if requestHeaders == nil {
 		requestHeaders = current.RequestHeaders
@@ -328,6 +331,7 @@ func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Requ
 	updatedSub, err := UpdateSubscription(id, dataFile, func(sub *models.Subscription) error {
 		sub.Name = name
 		sub.URL = rawURL
+		sub.Filter = filter
 		sub.Type = subType
 		sub.RequestHeaders = requestHeaders
 		sub.FilePath = filePath
@@ -542,6 +546,7 @@ func decodeSubscriptionPayload(r *http.Request) (subscriptionPayload, error) {
 
 	payload.Name = strings.TrimSpace(payload.Name)
 	payload.URL = strings.TrimSpace(payload.URL)
+	payload.Filter = strings.TrimSpace(payload.Filter)
 	payload.Type = strings.TrimSpace(payload.Type)
 	for key, value := range payload.RequestHeaders {
 		trimmedKey := strings.TrimSpace(key)
