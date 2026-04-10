@@ -13,6 +13,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Version is the application version, set via ldflags during build
+var Version = "dev"
+
 type Config struct {
 	Port              int           `yaml:"port"`
 	DataDir           string        `yaml:"data_dir"`
