@@ -40,6 +40,7 @@ starting clash-subscription-manager v1.0.2 on port 8080
 - Create, edit, delete, and switch between multiple templates in the web UI.
 - The saved YAML is the base config. When you download a template, the server replaces `proxy-providers` with entries generated from all current subscriptions.
 - If a subscription has a `filter` value, the renderer writes it into that provider entry. Empty `filter` values are omitted.
+- `Copy Expanded Proxy URL` outputs flattened `proxies` entries and is suitable for clients such as Shadowrocket and Loon.
 - Render URL for a specific template: `/api/templates/{id}/render`
 - Render URL for the default template: `/api/templates/default/render`
 

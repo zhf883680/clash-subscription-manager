@@ -40,6 +40,7 @@ starting clash-subscription-manager v1.0.2 on port 8080
 - 模板支持多份创建、编辑、删除，并可设置一个默认模板。
 - 页面里编辑的是基础 YAML；下载模板时，系统会自动根据当前全部订阅生成 `proxy-providers`。
 - 如果订阅填写了 `filter`，渲染后的对应 provider 会带上该字段；未填写时不会输出。
+- `复制全节点地址` 会输出展开后的 `proxies` 配置，适用于 Shadowrocket、Loon 等软件。
 - 单个模板下载地址：`/api/templates/{id}/render`
 - 默认模板下载地址：`/api/templates/default/render`
 
