@@ -14,7 +14,7 @@ import (
 )
 
 // Version is the application version, set via ldflags during build
-var Version = "dev"
+var Version = "v1.0.2"
 
 type Config struct {
 	Port              int           `yaml:"port"`
@@ -39,7 +39,7 @@ func main() {
 
 	server := newServer(cfg)
 
-	logger.Infof("server starting on port %d", cfg.Port)
+	logStartup(cfg)
 	if cfg.HTTPS {
 		logger.Info("HTTPS enabled")
 		if err := server.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
@@ -51,6 +51,10 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatalf("failed to start server: %v", err)
 	}
+}
+
+func logStartup(cfg Config) {
+	logger.Infof("starting clash-subscription-manager %s on port %d", Version, cfg.Port)
 }
 
 func defaultConfig() Config {

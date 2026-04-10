@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 func TestLoadConfigUsesDefaultsWhenFileEmpty(t *testing.T) {
@@ -84,6 +87,35 @@ func TestNewRouterAllowsSubscriptionsAPIWithoutAuthentication(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"success":true`) {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
+	}
+}
+
+func TestLogStartupIncludesVersionAndPort(t *testing.T) {
+	var buffer bytes.Buffer
+	originalOut := logger.Out
+	originalFormatter := logger.Formatter
+	originalLevel := logger.Level
+	t.Cleanup(func() {
+		logger.SetOutput(originalOut)
+		logger.SetFormatter(originalFormatter)
+		logger.SetLevel(originalLevel)
+	})
+
+	logger.SetOutput(&buffer)
+	logger.SetFormatter(&logrus.TextFormatter{
+		DisableTimestamp: true,
+		DisableColors:    true,
+	})
+	logger.SetLevel(logrus.InfoLevel)
+
+	logStartup(defaultConfig())
+
+	output := buffer.String()
+	if !strings.Contains(output, "v1.0.2") {
+		t.Fatalf("startup log = %q, want version %q", output, "v1.0.2")
+	}
+	if !strings.Contains(output, "8080") {
+		t.Fatalf("startup log = %q, want port %q", output, "8080")
 	}
 }
 
