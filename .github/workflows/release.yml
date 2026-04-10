@@ -61,3 +61,11 @@ jobs:
             -o $OUTPUT_NAME .
 
           chmod +x $OUTPUT_NAME || true
+
+      - name: Upload to Release
+        if: matrix.target == 'binary'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: clash-subscription-manager-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
