@@ -51,6 +51,19 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Build and push Docker image
+        if: matrix.target == 'docker' && matrix.platform == 'linux/amd64'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            zhf883680/clash-subscription-manager:${{ steps.version.outputs.version }}
+            zhf883680/clash-subscription-manager:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Set up Go
         if: matrix.target == 'binary'
         uses: actions/setup-go@v5
