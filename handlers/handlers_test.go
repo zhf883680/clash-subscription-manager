@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"clash-subscription-manager/models"
 
@@ -262,6 +263,87 @@ func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 	}
 	if sub.Filter != "(?i)港|hk|hongkong|hong kong" {
 		t.Fatalf("filter = %q, want %q", sub.Filter, "(?i)港|hk|hongkong|hong kong")
+	}
+}
+
+func TestUpdateSubscriptionWithoutRefreshKeepsCachedFile(t *testing.T) {
+	dataDir := t.TempDir()
+	cachedName := "sub-1.yaml"
+	cachedPath := filepath.Join(dataDir, cachedName)
+	writeHandlerTestFile(t, cachedPath, []byte("cached-content"))
+
+	lastCheck := time.Now().Add(-2 * time.Hour).UTC()
+	updatedAt := time.Now().Add(-time.Hour).UTC()
+	err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:       "sub-1",
+			Name:     "before",
+			URL:      "https://example.com/old",
+			Filter:   "旧规则",
+			Type:     "clash",
+			FilePath: cachedName,
+			FileSize: int64(len("cached-content")),
+			UpdatedAt: updatedAt,
+			LastCheck: lastCheck,
+			RequestHeaders: map[string]string{
+				"User-Agent": "before-agent",
+			},
+			Status: "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+	})
+
+	body := bytes.NewBufferString(`{"name":"after","url":"https://example.com/new","filter":"(?i)港|hk","request_headers":{"User-Agent":"after-agent"}}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/subscribe/sub-1", body)
+	req = mux.SetURLVars(req, map[string]string{"id": "sub-1"})
+	rec := httptest.NewRecorder()
+
+	handler.SubscriptionHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	content, err := os.ReadFile(cachedPath)
+	if err != nil {
+		t.Fatalf("os.ReadFile(%q) error = %v", cachedPath, err)
+	}
+	if string(content) != "cached-content" {
+		t.Fatalf("cached content = %q, want %q", string(content), "cached-content")
+	}
+
+	sub, err := GetSubscription("sub-1", filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("GetSubscription() error = %v", err)
+	}
+	if sub.Name != "after" {
+		t.Fatalf("name = %q, want %q", sub.Name, "after")
+	}
+	if sub.URL != "https://example.com/new" {
+		t.Fatalf("url = %q, want %q", sub.URL, "https://example.com/new")
+	}
+	if sub.Filter != "(?i)港|hk" {
+		t.Fatalf("filter = %q, want %q", sub.Filter, "(?i)港|hk")
+	}
+	if sub.RequestHeaders["User-Agent"] != "after-agent" {
+		t.Fatalf("request header User-Agent = %q, want %q", sub.RequestHeaders["User-Agent"], "after-agent")
+	}
+	if sub.FileSize != int64(len("cached-content")) {
+		t.Fatalf("file size = %d, want %d", sub.FileSize, len("cached-content"))
+	}
+	if !sub.LastCheck.Equal(lastCheck) {
+		t.Fatalf("last check = %s, want %s", sub.LastCheck, lastCheck)
+	}
+	if !sub.UpdatedAt.After(updatedAt) {
+		t.Fatalf("updated_at = %s, want time after %s", sub.UpdatedAt, updatedAt)
 	}
 }
 

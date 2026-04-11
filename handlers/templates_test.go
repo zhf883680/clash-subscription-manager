@@ -166,6 +166,71 @@ rules:
 	}
 }
 
+func TestRenderTemplateHandlerUsesOnlySelectedSubscriptions(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-west",
+			Name:      "West",
+			URL:       "https://example.com/west",
+			FilePath:  "west-source.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+		{
+			ID:        "sub-ai",
+			Name:      "AI",
+			URL:       "https://example.com/ai",
+			FilePath:  "ai-source.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json")); err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	useAll := false
+	templateRecord, err := AddTemplate(models.Template{
+		Name:                    "selected-only",
+		Content:                 "proxy-providers: {}\nrules:\n  - MATCH,DIRECT\n",
+		SelectedSubscriptionIDs: []string{"sub-ai"},
+		UseAllSubscriptions:     &useAll,
+		UpdatedAt:               time.Now(),
+		IsDefault:               true,
+	}, filepath.Join(dataDir, "templates.json"))
+	if err != nil {
+		t.Fatalf("AddTemplate() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     4096,
+		DownloadTimeout: 0,
+		RateLimit:       10,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/templates/"+templateRecord.ID+"/render", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": templateRecord.ID})
+	rec := httptest.NewRecorder()
+
+	handler.RenderTemplateHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "/download/sub-ai") {
+		t.Fatalf("body missing selected subscription download url: %s", body)
+	}
+	if strings.Contains(body, "/download/sub-west") {
+		t.Fatalf("body should exclude unselected subscription: %s", body)
+	}
+}
+
 func TestRenderTemplateHandlerKeepsEmojiAsUTF8Characters(t *testing.T) {
 	dataDir := t.TempDir()
 

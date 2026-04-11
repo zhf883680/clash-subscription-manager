@@ -21,8 +21,10 @@ import (
 )
 
 type templatePayload struct {
-	Name    string `json:"name"`
-	Content string `json:"content"`
+	Name                    string   `json:"name"`
+	Content                 string   `json:"content"`
+	SelectedSubscriptionIDs []string `json:"selected_subscription_ids"`
+	UseAllSubscriptions     *bool    `json:"use_all_subscriptions"`
 }
 
 func (h *Handler) ListTemplatesHandler(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +82,8 @@ func (h *Handler) TemplateHandler(w http.ResponseWriter, r *http.Request) {
 		item, err := UpdateTemplate(id, dataFile, func(template *models.Template) error {
 			template.Name = payload.Name
 			template.Content = payload.Content
+			template.SelectedSubscriptionIDs = payload.SelectedSubscriptionIDs
+			template.UseAllSubscriptions = payload.UseAllSubscriptions
 			return nil
 		})
 		if err != nil {
@@ -190,9 +194,11 @@ func (h *Handler) createTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	item, err := AddTemplate(models.Template{
-		Name:      payload.Name,
-		Content:   payload.Content,
-		UpdatedAt: time.Now(),
+		Name:                    payload.Name,
+		Content:                 payload.Content,
+		SelectedSubscriptionIDs: payload.SelectedSubscriptionIDs,
+		UseAllSubscriptions:     payload.UseAllSubscriptions,
+		UpdatedAt:               time.Now(),
 	}, filepath.Join(h.config.DataDir, "templates.json"))
 	if err != nil {
 		h.respondJSON(w, http.StatusInternalServerError, Response{
@@ -210,7 +216,7 @@ func (h *Handler) createTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) writeRenderedTemplate(w http.ResponseWriter, r *http.Request, item *models.Template, mode templateRenderMode) {
-	rendered, err := h.renderTemplateContent(r, item.Content, mode)
+	rendered, err := h.renderTemplateContent(r, item, mode)
 	if err != nil {
 		h.respondJSON(w, http.StatusBadRequest, Response{
 			Success: false,
@@ -231,11 +237,12 @@ const (
 	templateRenderModeProxies   templateRenderMode = "proxies"
 )
 
-func (h *Handler) renderTemplateContent(r *http.Request, raw string, mode templateRenderMode) ([]byte, error) {
+func (h *Handler) renderTemplateContent(r *http.Request, item *models.Template, mode templateRenderMode) ([]byte, error) {
 	subscriptions, err := ListSubscriptions(filepath.Join(h.config.DataDir, "subscriptions.json"))
 	if err != nil {
 		return nil, fmt.Errorf("load subscriptions: %w", err)
 	}
+	subscriptions = selectTemplateSubscriptions(item, subscriptions)
 
 	var rendered string
 	switch mode {
@@ -244,12 +251,38 @@ func (h *Handler) renderTemplateContent(r *http.Request, raw string, mode templa
 		if err != nil {
 			return nil, err
 		}
-		rendered = replaceYAMLSection(raw, "proxy-providers", "")
+		rendered = replaceYAMLSection(item.Content, "proxy-providers", "")
 		rendered = replaceYAMLSection(rendered, "proxies", proxiesBlock)
 	default:
-		rendered = replaceYAMLSection(raw, "proxy-providers", renderProxyProvidersBlock(h.buildTemplateProviders(r, subscriptions)))
+		rendered = replaceYAMLSection(item.Content, "proxy-providers", renderProxyProvidersBlock(h.buildTemplateProviders(r, subscriptions)))
 	}
 	return []byte(rendered), nil
+}
+
+func selectTemplateSubscriptions(item *models.Template, subscriptions []models.Subscription) []models.Subscription {
+	if item == nil || item.UseAllSubscriptions == nil || *item.UseAllSubscriptions {
+		return subscriptions
+	}
+	if len(item.SelectedSubscriptionIDs) == 0 {
+		return []models.Subscription{}
+	}
+
+	selected := make(map[string]struct{}, len(item.SelectedSubscriptionIDs))
+	for _, id := range item.SelectedSubscriptionIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		selected[id] = struct{}{}
+	}
+
+	filtered := make([]models.Subscription, 0, len(selected))
+	for _, subscription := range subscriptions {
+		if _, ok := selected[subscription.ID]; ok {
+			filtered = append(filtered, subscription)
+		}
+	}
+	return filtered
 }
 
 func (h *Handler) renderExpandedProxiesBlock(subscriptions []models.Subscription) (string, error) {
@@ -591,5 +624,26 @@ func decodeTemplatePayload(r *http.Request) (templatePayload, error) {
 	if !strings.Contains(payload.Content, "proxy-providers:") {
 		payload.Content = strings.TrimRight(payload.Content, "\n") + "\n\nproxy-providers:\n"
 	}
+
+	selectedIDs := make([]string, 0, len(payload.SelectedSubscriptionIDs))
+	seen := make(map[string]struct{}, len(payload.SelectedSubscriptionIDs))
+	for _, id := range payload.SelectedSubscriptionIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		selectedIDs = append(selectedIDs, id)
+	}
+	payload.SelectedSubscriptionIDs = selectedIDs
+
+	if payload.UseAllSubscriptions == nil {
+		useAll := len(payload.SelectedSubscriptionIDs) == 0
+		payload.UseAllSubscriptions = &useAll
+	}
+
 	return payload, nil
 }

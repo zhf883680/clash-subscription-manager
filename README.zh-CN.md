@@ -14,11 +14,13 @@
 
 - 通过 URL 添加 Clash 订阅
 - 在本地保存下载的配置文件
-- 更新订阅 URL、节点筛选 Filter、请求头和缓存文件
+- 仅修改订阅 URL、节点筛选 Filter、请求头等信息，不刷新缓存文件
+- 按需手动更新订阅并刷新缓存文件
 - 通过 Web 界面复制本地下载链接
 - 管理多份 Clash 模板并设置默认模板
 - 在页面中直接编辑模板 YAML
-- 下载渲染后的模板配置，自动用当前全部订阅填充 `proxy-providers`
+- 模板可选择使用哪些订阅，默认全选
+- 下载渲染后的模板配置时，自动用该模板选中的订阅填充 `proxy-providers`
 - 支持为每个订阅单独设置可选的 `filter`，并在渲染 `proxy-providers` 时写入
 - 同时删除订阅和缓存文件
 
@@ -32,13 +34,15 @@ go run .
 启动时会输出当前版本，例如：
 
 ```text
-starting clash-subscription-manager v1.0.2 on port 8080
+starting clash-subscription-manager v1.0.4 on port 8080
 ```
 
 ## 模板说明
 
 - 模板支持多份创建、编辑、删除，并可设置一个默认模板。
-- 页面里编辑的是基础 YAML；下载模板时，系统会自动根据当前全部订阅生成 `proxy-providers`。
+- 订阅编辑支持“仅保存修改”和“保存并更新”两种方式。
+- 页面里编辑的是基础 YAML；下载模板时，系统会自动根据该模板勾选的订阅生成 `proxy-providers`。
+- 新建模板默认会选中全部订阅，也可以按模板单独缩小使用范围。
 - 如果订阅填写了 `filter`，渲染后的对应 provider 会带上该字段；未填写时不会输出。
 - `复制全节点地址` 会输出展开后的 `proxies` 配置，适用于 Shadowrocket、Loon 等软件。
 - 单个模板下载地址：`/api/templates/{id}/render`

@@ -73,7 +73,7 @@
         <section class="panel template-panel">
             <div class="panel-heading">
                 <h2>模板管理</h2>
-                <p>编辑基础 YAML。下载时系统会自动用当前全部订阅覆盖 `proxy-providers`。</p>
+                <p>编辑基础 YAML。下载时系统会自动用你为模板勾选的订阅覆盖 `proxy-providers`。</p>
                 <p>说明：系统只会在下载时自动替换 `proxy-providers`，其余 YAML 内容按你输入的原文保留。</p>
             </div>
 
@@ -96,6 +96,17 @@
                             <span>模板名称</span>
                             <input type="text" name="name" maxlength="100" placeholder="例如：我的主配置" required>
                         </label>
+
+                        <fieldset class="field template-subscription-field">
+                            <div class="field-header">
+                                <span>使用哪些订阅</span>
+                                <div class="template-subscription-actions">
+                                    <button type="button" id="select-all-template-subscriptions-btn" class="btn btn-secondary">全选</button>
+                                    <button type="button" id="clear-template-subscriptions-btn" class="btn btn-secondary">清空</button>
+                                </div>
+                            </div>
+                            <div id="template-subscription-options" class="template-subscription-options"></div>
+                        </fieldset>
 
                         <label class="field">
                             <span>模板内容</span>
@@ -123,8 +134,8 @@
         <div class="modal-card">
             <div class="modal-heading">
                 <div>
-                    <p class="eyebrow">Refresh Subscription</p>
-                    <h2 id="edit-modal-title">更新订阅</h2>
+                    <p class="eyebrow">Edit Subscription</p>
+                    <h2 id="edit-modal-title">编辑订阅</h2>
                 </div>
                 <button type="button" id="close-edit-modal" class="icon-button" aria-label="关闭">×</button>
             </div>
@@ -164,6 +175,7 @@
 
                 <div class="modal-actions">
                     <button type="button" id="cancel-edit-modal" class="btn btn-secondary">取消</button>
+                    <button type="button" id="edit-save-btn" class="btn btn-secondary">仅保存修改</button>
                     <button type="submit" id="edit-submit-btn" class="btn btn-primary">保存并更新</button>
                 </div>
             </form>

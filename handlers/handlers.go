@@ -236,7 +236,7 @@ func (h *Handler) SubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// subscriptionHandler handles GET and DELETE for a single subscription
+// subscriptionHandler handles GET, PUT and DELETE for a single subscription
 func (h *Handler) SubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -246,6 +246,8 @@ func (h *Handler) SubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		h.getSubscription(w, id, dataFile)
+	case http.MethodPut:
+		h.updateSubscriptionHandler(w, r, id, dataFile)
 	case http.MethodDelete:
 		h.deleteSubscription(w, id, dataFile)
 	default:
@@ -254,6 +256,66 @@ func (h *Handler) SubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 			Error:   "Method not allowed",
 		})
 	}
+}
+
+func (h *Handler) updateSubscriptionHandler(w http.ResponseWriter, r *http.Request, id string, dataFile string) {
+	current, err := GetSubscription(id, dataFile)
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Subscription not found: %v", err),
+		})
+		return
+	}
+
+	payload, err := decodeSubscriptionPayload(r)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	name := payload.Name
+	if name == "" {
+		name = current.Name
+	}
+	rawURL := payload.URL
+	if rawURL == "" {
+		rawURL = current.URL
+	}
+	subType := payload.Type
+	if subType == "" {
+		subType = current.Type
+	}
+	requestHeaders := payload.RequestHeaders
+	if requestHeaders == nil {
+		requestHeaders = current.RequestHeaders
+	}
+
+	updatedSub, err := UpdateSubscription(id, dataFile, func(sub *models.Subscription) error {
+		sub.Name = name
+		sub.URL = rawURL
+		sub.Filter = payload.Filter
+		sub.Type = subType
+		sub.RequestHeaders = requestHeaders
+		sub.UpdatedAt = time.Now()
+		return nil
+	})
+	if err != nil {
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to update subscription: %v", err),
+		})
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, Response{
+		Success: true,
+		Message: "Subscription updated successfully",
+		Data:    updatedSub,
+	})
 }
 
 // RefreshSubscriptionHandler updates subscription fields and refreshes the cached file.

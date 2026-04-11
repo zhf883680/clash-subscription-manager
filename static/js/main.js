@@ -133,6 +133,9 @@ const deleteTemplateButton = document.getElementById("delete-template-btn");
 const newTemplateButton = document.getElementById("new-template-btn");
 const templatesContainer = document.getElementById("templates");
 const templateEmptyState = document.getElementById("template-empty-state");
+const templateSubscriptionOptions = document.getElementById("template-subscription-options");
+const selectAllTemplateSubscriptionsButton = document.getElementById("select-all-template-subscriptions-btn");
+const clearTemplateSubscriptionsButton = document.getElementById("clear-template-subscriptions-btn");
 
 const toast = document.getElementById("toast");
 const toastMessage = document.getElementById("toast-message");
@@ -141,6 +144,7 @@ const editModal = document.getElementById("edit-modal");
 const editForm = document.getElementById("edit-form");
 const editRequestHeadersInput = document.getElementById("edit-request-headers-input");
 const editSubmitButton = document.getElementById("edit-submit-btn");
+const editSaveButton = document.getElementById("edit-save-btn");
 const closeEditModalButton = document.getElementById("close-edit-modal");
 const cancelEditModalButton = document.getElementById("cancel-edit-modal");
 
@@ -181,34 +185,11 @@ form.addEventListener("submit", async (event) => {
 
 editForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  await submitEditForm({ refresh: true });
+});
 
-  const payload = buildSubscriptionPayload(editForm);
-  if (!payload) {
-    return;
-  }
-
-  const subscriptionID = editForm.elements.id.value;
-  setSubmitting(editSubmitButton, true, "正在更新...");
-  try {
-    const response = await fetch(`${API_BASE}/subscribe/${encodeURIComponent(subscriptionID)}/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || "更新失败");
-    }
-
-    closeEditModal();
-    showToast("订阅已更新");
-    await Promise.all([loadSubscriptions(), loadTemplates()]);
-  } catch (error) {
-    showToast(error.message || "更新失败", "error");
-  } finally {
-    setSubmitting(editSubmitButton, false, "保存并更新");
-  }
+editSaveButton.addEventListener("click", async () => {
+  await submitEditForm({ refresh: false });
 });
 
 templateForm.addEventListener("submit", async (event) => {
@@ -315,6 +296,14 @@ newTemplateButton.addEventListener("click", () => {
   resetTemplateEditor();
 });
 
+selectAllTemplateSubscriptionsButton.addEventListener("click", () => {
+  renderTemplateSubscriptionOptions(getAllSubscriptionIDs());
+});
+
+clearTemplateSubscriptionsButton.addEventListener("click", () => {
+  renderTemplateSubscriptionOptions([]);
+});
+
 closeEditModalButton.addEventListener("click", closeEditModal);
 cancelEditModalButton.addEventListener("click", closeEditModal);
 editModal.addEventListener("click", (event) => {
@@ -398,6 +387,7 @@ async function loadSubscriptions() {
 
     currentSubscriptions = result.data || [];
     renderSubscriptions(currentSubscriptions);
+    syncTemplateSubscriptionOptions();
   } catch (error) {
     subscriptionsContainer.innerHTML = "";
     emptyState.hidden = false;
@@ -469,7 +459,7 @@ function renderSubscriptions(subscriptions) {
           </div>
           <div class="subscription-actions">
             <button class="btn btn-secondary" data-action="copy-download-url" data-id="${escapeHtml(subscription.id)}">复制下载地址</button>
-            <button class="btn btn-secondary" data-action="edit-refresh" data-id="${escapeHtml(subscription.id)}">更新</button>
+            <button class="btn btn-secondary" data-action="edit-refresh" data-id="${escapeHtml(subscription.id)}">编辑</button>
             <button class="btn btn-danger" data-action="delete" data-id="${escapeHtml(subscription.id)}">删除</button>
           </div>
         </article>
@@ -538,6 +528,7 @@ function fillTemplateEditor(template) {
   templateForm.elements.id.value = template.id || "";
   templateForm.elements.name.value = template.name || "";
   templateContentInput.value = template.content || DEFAULT_TEMPLATE_CONTENT;
+  renderTemplateSubscriptionOptions(resolveTemplateSelectedSubscriptionIDs(template));
   renderTemplates(currentTemplates);
 }
 
@@ -545,6 +536,7 @@ function resetTemplateEditor() {
   templateForm.reset();
   templateForm.elements.id.value = "";
   templateContentInput.value = DEFAULT_TEMPLATE_CONTENT;
+  renderTemplateSubscriptionOptions(getAllSubscriptionIDs());
   renderTemplates(currentTemplates);
 }
 
@@ -576,6 +568,8 @@ function buildTemplatePayload() {
   const formData = new FormData(templateForm);
   const name = String(formData.get("name") || "").trim();
   const content = String(formData.get("content") || "").trim();
+  const selectedSubscriptionIDs = getCheckedTemplateSubscriptionIDs();
+  const allSubscriptionIDs = getAllSubscriptionIDs();
 
   if (!name) {
     showToast("请填写模板名称", "error");
@@ -586,7 +580,120 @@ function buildTemplatePayload() {
     return null;
   }
 
-  return { name, content };
+  const useAllSubscriptions =
+    allSubscriptionIDs.length === 0 || selectedSubscriptionIDs.length === allSubscriptionIDs.length;
+
+  return {
+    name,
+    content,
+    selected_subscription_ids: useAllSubscriptions ? [] : selectedSubscriptionIDs,
+    use_all_subscriptions: useAllSubscriptions,
+  };
+}
+
+function getAllSubscriptionIDs() {
+  return currentSubscriptions.map((subscription) => subscription.id).filter(Boolean);
+}
+
+function getCheckedTemplateSubscriptionIDs() {
+  return Array.from(
+    templateSubscriptionOptions.querySelectorAll('input[name="selected_subscription_ids"]:checked'),
+  ).map((input) => input.value);
+}
+
+function resolveTemplateSelectedSubscriptionIDs(template) {
+  const allSubscriptionIDs = getAllSubscriptionIDs();
+  if (!template || template.use_all_subscriptions !== false) {
+    return allSubscriptionIDs;
+  }
+
+  const existingIDs = new Set(allSubscriptionIDs);
+  return (template.selected_subscription_ids || []).filter((id) => existingIDs.has(id));
+}
+
+function renderTemplateSubscriptionOptions(selectedSubscriptionIDs) {
+  if (!currentSubscriptions.length) {
+    templateSubscriptionOptions.innerHTML = '<p class="template-subscription-empty">当前还没有订阅，后续添加后会默认全选。</p>';
+    selectAllTemplateSubscriptionsButton.disabled = true;
+    clearTemplateSubscriptionsButton.disabled = true;
+    return;
+  }
+
+  selectAllTemplateSubscriptionsButton.disabled = false;
+  clearTemplateSubscriptionsButton.disabled = false;
+
+  const selectedSet = new Set(selectedSubscriptionIDs);
+  templateSubscriptionOptions.innerHTML = currentSubscriptions
+    .map((subscription) => {
+      const isChecked = selectedSet.has(subscription.id) ? "checked" : "";
+      return `
+        <label class="template-subscription-option">
+          <input type="checkbox" name="selected_subscription_ids" value="${escapeHtml(subscription.id)}" ${isChecked}>
+          <span class="template-subscription-copy">
+            <strong>${escapeHtml(subscription.name || "未命名订阅")}</strong>
+            <span>${escapeHtml(subscription.url || "")}</span>
+          </span>
+        </label>
+      `;
+    })
+    .join("");
+}
+
+function syncTemplateSubscriptionOptions() {
+  const activeTemplate = currentTemplates.find((item) => item.id === templateForm.elements.id.value);
+  if (activeTemplate) {
+    renderTemplateSubscriptionOptions(resolveTemplateSelectedSubscriptionIDs(activeTemplate));
+    return;
+  }
+
+  const hasRenderedOptions = Boolean(
+    templateSubscriptionOptions.querySelector('input[name="selected_subscription_ids"]'),
+  );
+  if (hasRenderedOptions) {
+    renderTemplateSubscriptionOptions(getCheckedTemplateSubscriptionIDs());
+    return;
+  }
+
+  renderTemplateSubscriptionOptions(getAllSubscriptionIDs());
+}
+
+async function submitEditForm({ refresh }) {
+  const payload = buildSubscriptionPayload(editForm);
+  if (!payload) {
+    return;
+  }
+
+  const subscriptionID = editForm.elements.id.value;
+  const loadingText = refresh ? "正在更新..." : "正在保存...";
+
+  setSubmitting(editSaveButton, true, refresh ? "仅保存修改" : loadingText);
+  setSubmitting(editSubmitButton, true, refresh ? loadingText : "保存并更新");
+  try {
+    const response = await fetch(
+      refresh
+        ? `${API_BASE}/subscribe/${encodeURIComponent(subscriptionID)}/refresh`
+        : `${API_BASE}/subscribe/${encodeURIComponent(subscriptionID)}`,
+      {
+        method: refresh ? "POST" : "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || result.message || (refresh ? "更新失败" : "保存失败"));
+    }
+
+    closeEditModal();
+    showToast(refresh ? "订阅已更新" : "订阅修改已保存");
+    await Promise.all([loadSubscriptions(), loadTemplates()]);
+  } catch (error) {
+    showToast(error.message || (refresh ? "更新失败" : "保存失败"), "error");
+  } finally {
+    setSubmitting(editSaveButton, false, "仅保存修改");
+    setSubmitting(editSubmitButton, false, "保存并更新");
+  }
 }
 
 function parseHeaders(text) {

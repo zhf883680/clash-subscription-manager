@@ -4,10 +4,12 @@ import "time"
 
 // Template represents an editable Clash config template.
 type Template struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Content   string    `json:"content"`
-	IsDefault bool      `json:"is_default"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                      string    `json:"id"`
+	Name                    string    `json:"name"`
+	Content                 string    `json:"content"`
+	IsDefault               bool      `json:"is_default"`
+	SelectedSubscriptionIDs []string  `json:"selected_subscription_ids,omitempty"`
+	UseAllSubscriptions     *bool     `json:"use_all_subscriptions,omitempty"`
+	CreatedAt               time.Time `json:"created_at,omitempty"`
+	UpdatedAt               time.Time `json:"updated_at"`
 }

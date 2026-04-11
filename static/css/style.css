@@ -95,10 +95,21 @@ body {
   display: grid;
   gap: 8px;
   font-size: 14px;
+  margin: 0;
+  min-width: 0;
+  border: 0;
+  padding: 0;
 }
 
 .field span {
   color: var(--muted);
+}
+
+.field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .field input,
@@ -290,6 +301,49 @@ body {
   line-height: 1.5;
 }
 
+.template-subscription-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-subscription-options {
+  display: grid;
+  gap: 10px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(61, 53, 39, 0.12);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.template-subscription-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.template-subscription-option input {
+  width: auto;
+  margin: 3px 0 0;
+}
+
+.template-subscription-copy {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.template-subscription-copy strong {
+  color: var(--text);
+}
+
+.template-subscription-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
 .toast {
   position: fixed;
   right: 20px;
@@ -388,6 +442,12 @@ body {
 
   .subscription-head,
   .subscription-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .field-header,
+  .modal-actions {
     flex-direction: column;
     align-items: stretch;
   }

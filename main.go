@@ -14,7 +14,7 @@ import (
 )
 
 // Version is the application version, set via ldflags during build
-var Version = "v1.0.2"
+var Version = "v1.0.4"
 
 type Config struct {
 	Port              int           `yaml:"port"`
@@ -113,7 +113,7 @@ func newRouter(cfg *handlers.Config) http.Handler {
 	api := router.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/subscribe", h.SubscribeHandler).Methods(http.MethodPost)
 	api.HandleFunc("/subscriptions", h.ListSubscriptionsHandler).Methods(http.MethodGet)
-	api.HandleFunc("/subscribe/{id}", h.SubscriptionHandler).Methods(http.MethodGet, http.MethodDelete)
+	api.HandleFunc("/subscribe/{id}", h.SubscriptionHandler).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
 	api.HandleFunc("/subscribe/{id}/refresh", h.RefreshSubscriptionHandler).Methods(http.MethodPost)
 	api.HandleFunc("/templates", h.ListTemplatesHandler).Methods(http.MethodGet)
 	api.HandleFunc("/templates", h.TemplatesHandler).Methods(http.MethodPost)
