@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"clash-subscription-manager/models"
@@ -68,24 +69,28 @@ func (h *Handler) RateLimit(next http.HandlerFunc) http.HandlerFunc {
 		lastReset time.Time
 	}
 	clients := make(map[string]*client)
+	var clientsMu sync.Mutex
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get client IP
 		ip := r.RemoteAddr
 
-		// Initialize or get client record
-		if _, exists := clients[ip]; !exists {
-			clients[ip] = &client{requests: 0, lastReset: time.Now()}
+		clientsMu.Lock()
+		record, exists := clients[ip]
+		if !exists {
+			record = &client{requests: 0, lastReset: time.Now()}
+			clients[ip] = record
 		}
 
 		// Reset counter if minute has passed
-		if time.Since(clients[ip].lastReset) > time.Minute {
-			clients[ip].requests = 0
-			clients[ip].lastReset = time.Now()
+		if time.Since(record.lastReset) > time.Minute {
+			record.requests = 0
+			record.lastReset = time.Now()
 		}
 
 		// Check rate limit
-		if clients[ip].requests >= h.config.RateLimit {
+		if record.requests >= h.config.RateLimit {
+			clientsMu.Unlock()
 			h.respondJSON(w, http.StatusTooManyRequests, Response{
 				Success: false,
 				Error:   "Rate limit exceeded",
@@ -93,7 +98,8 @@ func (h *Handler) RateLimit(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		clients[ip].requests++
+		record.requests++
+		clientsMu.Unlock()
 		next(w, r)
 	}
 }

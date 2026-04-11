@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -92,6 +94,47 @@ func TestSubscribeHandlerDownloadsAndStoresSubscriptionFile(t *testing.T) {
 	}
 	if got := subs[0].Filter; got != "(?i)港|hk|hongkong|hong kong" {
 		t.Fatalf("saved filter = %q, want %q", got, "(?i)港|hk|hongkong|hong kong")
+	}
+}
+
+func TestRateLimitHandlesConcurrentRequestsSafely(t *testing.T) {
+	handler := NewHandler(&Config{
+		DataDir:         t.TempDir(),
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+		RateLimit:       1000,
+	})
+
+	wrapped := handler.RateLimit(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	const requestCount = 200
+	var wg sync.WaitGroup
+	errCh := make(chan error, requestCount)
+
+	for i := 0; i < requestCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			req := httptest.NewRequest(http.MethodGet, "/download/sub-1", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			rec := httptest.NewRecorder()
+
+			wrapped(rec, req)
+
+			if rec.Code != http.StatusOK {
+				errCh <- fmt.Errorf("unexpected status %d", rec.Code)
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Fatal(err)
 	}
 }
 
