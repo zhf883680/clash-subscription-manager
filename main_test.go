@@ -111,8 +111,8 @@ func TestLogStartupIncludesVersionAndPort(t *testing.T) {
 	logStartup(defaultConfig())
 
 	output := buffer.String()
-	if !strings.Contains(output, "v1.0.2") {
-		t.Fatalf("startup log = %q, want version %q", output, "v1.0.2")
+	if !strings.Contains(output, Version) {
+		t.Fatalf("startup log = %q, want version %q", output, Version)
 	}
 	if !strings.Contains(output, "8080") {
 		t.Fatalf("startup log = %q, want port %q", output, "8080")

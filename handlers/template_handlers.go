@@ -286,7 +286,7 @@ func selectTemplateSubscriptions(item *models.Template, subscriptions []models.S
 }
 
 func (h *Handler) renderExpandedProxiesBlock(subscriptions []models.Subscription) (string, error) {
-	proxies, err := h.collectFilteredProxyNodes(subscriptions)
+	proxies, err := h.collectExpandedProxyNodes(subscriptions)
 	if err != nil {
 		return "", err
 	}
@@ -503,17 +503,21 @@ func sanitizeProviderLabel(name string) string {
 	return strings.Join(fields, " ")
 }
 
-func (h *Handler) collectFilteredProxyNodes(subscriptions []models.Subscription) ([]*yaml.Node, error) {
+func (h *Handler) collectExpandedProxyNodes(subscriptions []models.Subscription) ([]*yaml.Node, error) {
 	var proxies []*yaml.Node
 	for _, subscription := range subscriptions {
-		filter := strings.TrimSpace(subscription.Filter)
-		if subscription.FilePath == "" || filter == "" {
+		if subscription.FilePath == "" {
 			continue
 		}
 
-		matcher, err := regexp.Compile(filter)
-		if err != nil {
-			return nil, fmt.Errorf("compile filter for subscription %q: %w", subscription.Name, err)
+		var matcher *regexp.Regexp
+		filter := strings.TrimSpace(subscription.Filter)
+		if filter != "" {
+			compiled, err := regexp.Compile(filter)
+			if err != nil {
+				return nil, fmt.Errorf("compile filter for subscription %q: %w", subscription.Name, err)
+			}
+			matcher = compiled
 		}
 
 		filePath := filepath.Join(h.config.DataDir, subscription.FilePath)
@@ -522,7 +526,7 @@ func (h *Handler) collectFilteredProxyNodes(subscriptions []models.Subscription)
 			return nil, fmt.Errorf("read subscription file for %q: %w", subscription.Name, err)
 		}
 
-		items, err := extractMatchingProxies(data, matcher)
+		items, err := extractProxyNodes(data, matcher)
 		if err != nil {
 			return nil, fmt.Errorf("extract proxies for %q: %w", subscription.Name, err)
 		}
@@ -531,7 +535,7 @@ func (h *Handler) collectFilteredProxyNodes(subscriptions []models.Subscription)
 	return proxies, nil
 }
 
-func extractMatchingProxies(data []byte, matcher *regexp.Regexp) ([]*yaml.Node, error) {
+func extractProxyNodes(data []byte, matcher *regexp.Regexp) ([]*yaml.Node, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parse subscription yaml: %w", err)
@@ -549,9 +553,11 @@ func extractMatchingProxies(data []byte, matcher *regexp.Regexp) ([]*yaml.Node, 
 
 	matches := make([]*yaml.Node, 0, len(proxiesNode.Content))
 	for _, proxyNode := range proxiesNode.Content {
-		name := findProxyName(proxyNode)
-		if name == "" || !matcher.MatchString(name) {
-			continue
+		if matcher != nil {
+			name := findProxyName(proxyNode)
+			if name == "" || !matcher.MatchString(name) {
+				continue
+			}
 		}
 		matches = append(matches, cloneYAMLNode(proxyNode))
 	}

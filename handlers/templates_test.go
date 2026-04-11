@@ -455,6 +455,82 @@ rules:
 	}
 }
 
+func TestRenderTemplateProxiesHandlerUsesSelectedSubscriptionsWithoutFilter(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-all",
+			Name:      "All Nodes",
+			URL:       "https://example.com/all",
+			FilePath:  "all.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+		{
+			ID:        "sub-jp",
+			Name:      "JP Only",
+			URL:       "https://example.com/jp",
+			Filter:    "(?i)japan|jp",
+			FilePath:  "jp.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json")); err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	writeTemplateTestFile(t, filepath.Join(dataDir, "all.yaml"), []byte(strings.TrimSpace(`
+proxies:
+  - { name: "All 01", type: ss, server: all1.example.com, port: 443, cipher: aes-128-gcm, password: secret }
+  - { name: "All 02", type: ss, server: all2.example.com, port: 443, cipher: aes-128-gcm, password: secret }
+`)+"\n"))
+	writeTemplateTestFile(t, filepath.Join(dataDir, "jp.yaml"), []byte(strings.TrimSpace(`
+proxies:
+  - { name: "Japan 01", type: ss, server: jp1.example.com, port: 443, cipher: aes-128-gcm, password: secret }
+`)+"\n"))
+
+	useAll := false
+	templateRecord, err := AddTemplate(models.Template{
+		Name:                    "selected-expanded",
+		Content:                 "proxy-providers: {}\nrules:\n  - MATCH,DIRECT\n",
+		SelectedSubscriptionIDs: []string{"sub-all"},
+		UseAllSubscriptions:     &useAll,
+		UpdatedAt:               time.Now(),
+		IsDefault:               true,
+	}, filepath.Join(dataDir, "templates.json"))
+	if err != nil {
+		t.Fatalf("AddTemplate() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     4096,
+		DownloadTimeout: 0,
+		RateLimit:       10,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/templates/"+templateRecord.ID+"/render-proxies", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": templateRecord.ID})
+	rec := httptest.NewRecorder()
+
+	handler.RenderTemplateProxiesHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "All 01") || !strings.Contains(body, "All 02") {
+		t.Fatalf("body should include all proxies from selected subscription without filter: %s", body)
+	}
+	if strings.Contains(body, "Japan 01") {
+		t.Fatalf("body should exclude proxies from unselected subscription: %s", body)
+	}
+}
+
 func TestRenderDefaultTemplateProxiesHandlerUsesDefaultTemplate(t *testing.T) {
 	dataDir := t.TempDir()
 
@@ -529,7 +605,7 @@ func TestRenderTemplateProxiesHandlerReplacesTopLevelProxiesOnly(t *testing.T) {
 	writeTemplateTestFile(t, filepath.Join(dataDir, "hk.yaml"), []byte(strings.TrimSpace(`
 proxies:
   - { name: "香港实验性 IEPL 专线 1", type: trojan, server: hk.example.com, port: 443, password: secret, sni: m.ctrip.com, udp: true }
-`) + "\n"))
+`)+"\n"))
 
 	templateRecord, err := AddTemplate(models.Template{
 		Name: "top-level-proxies",
@@ -612,7 +688,7 @@ func TestRenderTemplateProxiesHandlerKeepsEmojiAsUTF8Characters(t *testing.T) {
 	writeTemplateTestFile(t, filepath.Join(dataDir, "hk.yaml"), []byte(strings.TrimSpace(`
 proxies:
   - { name: "🇭🇰 香港实验性 IEPL 专线 1", type: trojan, server: hk.example.com, port: 443, password: secret, sni: m.ctrip.com, udp: true }
-`) + "\n"))
+`)+"\n"))
 
 	templateRecord, err := AddTemplate(models.Template{
 		Name: "emoji-expanded",
