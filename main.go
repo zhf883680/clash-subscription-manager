@@ -14,7 +14,7 @@ import (
 )
 
 // Version is the application version, set via ldflags during build
-var Version = "v1.0.6"
+var Version = "v1.0.7"
 
 type Config struct {
 	Port              int           `yaml:"port"`
@@ -120,7 +120,6 @@ func newRouter(cfg *handlers.Config) http.Handler {
 	api.HandleFunc("/templates/default/render", h.RenderDefaultTemplateHandler).Methods(http.MethodGet)
 	api.HandleFunc("/templates/default/render-proxies", h.RenderDefaultTemplateProxiesHandler).Methods(http.MethodGet)
 	api.HandleFunc("/templates/{id}", h.TemplateHandler).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
-	api.HandleFunc("/templates/{id}/default", h.SetDefaultTemplateHandler).Methods(http.MethodPost)
 	api.HandleFunc("/templates/{id}/render", h.RenderTemplateHandler).Methods(http.MethodGet)
 	api.HandleFunc("/templates/{id}/render-proxies", h.RenderTemplateProxiesHandler).Methods(http.MethodGet)
 

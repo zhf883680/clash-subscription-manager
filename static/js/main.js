@@ -1,808 +1,692 @@
-const API_BASE = "/api";
-const DEFAULT_TEMPLATE_CONTENT = `
-proxy-providers: {}
-proxy-groups:
-  - { name: 🚩 PROXY, type: select, proxies: [♻️ 自动选择, 🚀 手动切换] }
-  - { name: 🤖 人工智能, type: fallback, proxies: [✨ AISelect] }
+// State
+let subscriptions = [];
+let templates = [];
+let currentTemplateId = null;
 
-  #  代理
-  - { name: 🚀 手动切换, type: select ,include-all: true }
-  - {
-      name: ♻️ 自动选择,
-      type: fallback,
-      interval: 300,
-      proxies: [ 🇸🇬 Singapore, 🇯🇵 Japan ,🇺🇸 USA, 🚀 手动切换],
-    }
-  # 基础节点
-  - {
-      name: ✨ AISelect,
-      type: select,
-      interval: 300,
-      proxies: [🇺🇸 USA,🇸🇬 Singapore, 🇯🇵 Japan],
-    }
+// ── Utilities ────────────────────────────────────────────────────────────────
 
-  - {
-      name: 🇺🇸 USA,
-      type: fallback,
-      interval: 300,
-      timeout: 1000,
-      tolerance: 100,
-      lazy:false,
-      include-all: true,
-      exclude-type: direct,
-      filter: "美国|United States",
-    }
-  - {
-      name: 🇯🇵 Japan,
-      type: url-test,
-      interval: 300,
-      timeout: 1000,
-      tolerance: 100,
-      url: "https://www.gstatic.com/generate_204",
-      lazy:false,
-      include-all: true,
-      exclude-type: direct,
-      filter: "日本|Japan",
-    }
-  - {
-      name: 🇸🇬 Singapore,
-      type: url-test,
-      interval: 300,
-      timeout: 1000,
-      tolerance: 100,
-      url: "https://www.gstatic.com/generate_204",
-      lazy:false,
-      include-all: true,
-      exclude-type: direct,
-      filter: "新加坡|Singapore",
-    }
-  - {
-      name: 🇭🇰 HongKong,
-      type: url-test,
-      interval: 300,
-      timeout: 1000,
-      tolerance: 100,
-      url: "https://www.gstatic.com/generate_204",
-      lazy:false,
-      include-all: true,
-      exclude-type: direct,
-      filter: "香港|Hong Kong",
-    }
+function api(path, options = {}) {
+  const headers = { "Content-Type": "application/json" };
+  const token = localStorage.getItem("token");
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
-rule-providers:
-  AWAvenue-Ads:
-    type: http
-    behavior: domain
-    format: yaml
-    # path可为空(仅限clash.meta 1.15.0以上版本)
-    path: ./ruleset/AWAvenue-Ads.yaml
-    url: "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-Clash.yaml"
-    interval: 600
-
-rules:
-
-  - SRC-IP-CIDR,192.168.59.0/24,🚩 PROXY
-  - SRC-PORT,7890,🚩 PROXY
-  - DST-PORT,22,DIRECT
-  - DOMAIN-SUFFIX,apifox.it.com,REJECT
-  - AND,(AND,(DST-PORT,443),(NETWORK,UDP)),(NOT,((GEOSITE,cn))),REJECT
-  - AND,(AND,(DST-PORT,443),(NETWORK,UDP)),(NOT,((GEOIP,CN))),REJECT
-  - RULE-SET,AWAvenue-Ads,REJECT
-  - GEOIP,lan,DIRECT,no-resolve
-
-  - GEOSITE,category-ads-all,REJECT
-  - GEOSITE,private,DIRECT
-  - GEOSITE,icloud,DIRECT
-  - GEOSITE,apple,DIRECT
-  - GEOSITE,anthropic,🤖 人工智能
-
-  - GEOSITE,category-ai-chat-!cn,🤖 人工智能
-
-  - GEOSITE,youtube,🚩 PROXY
-  - GEOSITE,google,🤖 人工智能
-  - GEOSITE,github,🚩 PROXY
-  - GEOSITE,onedrive,DIRECT
-  - GEOSITE,microsoft,DIRECT
-
-  - GEOSITE,CN,DIRECT
-  - GEOSITE,steam@cn,DIRECT
-  - GEOSITE,category-games@cn,DIRECT
-  - GEOSITE,geolocation-!cn,🚩 PROXY
-  - GEOSITE,telegram,🇭🇰 HongKong
-  - GEOIP,google,🚩 PROXY
-  - GEOIP,telegram,🇭🇰 HongKong
-  - GEOIP,CN,DIRECT
-  - MATCH,🚩 PROXY
-`;
-
-const form = document.getElementById("subscribe-form");
-const requestHeadersInput = document.getElementById("request-headers-input");
-const submitButton = document.getElementById("submit-btn");
-
-const loading = document.getElementById("loading");
-const subscriptionsContainer = document.getElementById("subscriptions");
-const emptyState = document.getElementById("empty-state");
-
-const templateForm = document.getElementById("template-form");
-const templateContentInput = document.getElementById("template-content-input");
-const templateSubmitButton = document.getElementById("template-submit-btn");
-const templateSetDefaultButton = document.getElementById("template-set-default-btn");
-const copyTemplateURLButton = document.getElementById("copy-template-url-btn");
-const copyExpandedTemplateURLButton = document.getElementById("copy-expanded-template-url-btn");
-const deleteTemplateButton = document.getElementById("delete-template-btn");
-const newTemplateButton = document.getElementById("new-template-btn");
-const templatesContainer = document.getElementById("templates");
-const templateEmptyState = document.getElementById("template-empty-state");
-const templateSubscriptionOptions = document.getElementById("template-subscription-options");
-const selectAllTemplateSubscriptionsButton = document.getElementById("select-all-template-subscriptions-btn");
-const clearTemplateSubscriptionsButton = document.getElementById("clear-template-subscriptions-btn");
-
-const toast = document.getElementById("toast");
-const toastMessage = document.getElementById("toast-message");
-
-const editModal = document.getElementById("edit-modal");
-const editForm = document.getElementById("edit-form");
-const editRequestHeadersInput = document.getElementById("edit-request-headers-input");
-const editSubmitButton = document.getElementById("edit-submit-btn");
-const editSaveButton = document.getElementById("edit-save-btn");
-const closeEditModalButton = document.getElementById("close-edit-modal");
-const cancelEditModalButton = document.getElementById("cancel-edit-modal");
-
-let currentSubscriptions = [];
-let currentTemplates = [];
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const payload = buildSubscriptionPayload(form);
-  if (!payload) {
-    return;
-  }
-
-  setSubmitting(submitButton, true, "正在添加...");
-  try {
-    const response = await fetch(`${API_BASE}/subscribe`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+  return fetch(`/api${path}`, { ...options, headers: { ...headers, ...options.headers } })
+    .then(async (res) => {
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      return json;
     });
-
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || "添加失败");
-    }
-
-    form.reset();
-    requestHeadersInput.value = "";
-    showToast("订阅已保存");
-    await Promise.all([loadSubscriptions(), loadTemplates()]);
-  } catch (error) {
-    showToast(error.message || "添加失败", "error");
-  } finally {
-    setSubmitting(submitButton, false, "添加订阅");
-  }
-});
-
-editForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await submitEditForm({ refresh: true });
-});
-
-editSaveButton.addEventListener("click", async () => {
-  await submitEditForm({ refresh: false });
-});
-
-templateForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const payload = buildTemplatePayload();
-  if (!payload) {
-    return;
-  }
-
-  const currentID = templateForm.elements.id.value;
-  const isEditing = Boolean(currentID);
-  setSubmitting(templateSubmitButton, true, isEditing ? "正在保存..." : "正在创建...");
-  try {
-    const response = await fetch(
-      isEditing ? `${API_BASE}/templates/${encodeURIComponent(currentID)}` : `${API_BASE}/templates`,
-      {
-        method: isEditing ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      },
-    );
-
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || "保存失败");
-    }
-
-    showToast(isEditing ? "模板已更新" : "模板已创建");
-    await loadTemplates(result.data?.id || currentID);
-  } catch (error) {
-    showToast(error.message || "保存失败", "error");
-  } finally {
-    setSubmitting(templateSubmitButton, false, "保存模板");
-  }
-});
-
-templateSetDefaultButton.addEventListener("click", async () => {
-  const currentID = templateForm.elements.id.value;
-  if (!currentID) {
-    showToast("请先选择一个模板", "error");
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(currentID)}/default`, {
-      method: "POST",
-    });
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || "设置默认失败");
-    }
-    showToast("默认模板已更新");
-    await loadTemplates(currentID);
-  } catch (error) {
-    showToast(error.message || "设置默认失败", "error");
-  }
-});
-
-deleteTemplateButton.addEventListener("click", async () => {
-  const currentID = templateForm.elements.id.value;
-  if (!currentID) {
-    resetTemplateEditor();
-    return;
-  }
-  if (!window.confirm("确定删除这个模板吗？")) {
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(currentID)}`, {
-      method: "DELETE",
-    });
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || "删除失败");
-    }
-    showToast("模板已删除");
-    await loadTemplates();
-  } catch (error) {
-    showToast(error.message || "删除失败", "error");
-  }
-});
-
-copyTemplateURLButton.addEventListener("click", async () => {
-  const currentID = templateForm.elements.id.value;
-  if (!currentID) {
-    showToast("请先选择一个模板", "error");
-    return;
-  }
-  await copyAbsoluteURL(`${API_BASE}/templates/${encodeURIComponent(currentID)}/render`, "模板下载地址已复制到剪贴板");
-});
-
-copyExpandedTemplateURLButton.addEventListener("click", async () => {
-  const currentID = templateForm.elements.id.value;
-  if (!currentID) {
-    showToast("请先选择一个模板", "error");
-    return;
-  }
-  await copyAbsoluteURL(`${API_BASE}/templates/${encodeURIComponent(currentID)}/render-proxies`, "全节点模板地址已复制到剪贴板");
-});
-
-newTemplateButton.addEventListener("click", () => {
-  resetTemplateEditor();
-});
-
-selectAllTemplateSubscriptionsButton.addEventListener("click", () => {
-  renderTemplateSubscriptionOptions(getAllSubscriptionIDs());
-});
-
-clearTemplateSubscriptionsButton.addEventListener("click", () => {
-  renderTemplateSubscriptionOptions([]);
-});
-
-closeEditModalButton.addEventListener("click", closeEditModal);
-cancelEditModalButton.addEventListener("click", closeEditModal);
-editModal.addEventListener("click", (event) => {
-  if (event.target === editModal) {
-    closeEditModal();
-  }
-});
-
-subscriptionsContainer.addEventListener("click", async (event) => {
-  const target = event.target.closest("button[data-action]");
-  if (!target) {
-    return;
-  }
-
-  const { action, id } = target.dataset;
-  if (!id) {
-    return;
-  }
-
-  if (action === "copy-download-url") {
-    await copyAbsoluteURL(`/download/${encodeURIComponent(id)}`, "下载地址已复制到剪贴板");
-    return;
-  }
-
-  if (action === "edit-refresh") {
-    openEditModal(id);
-    return;
-  }
-
-  if (action === "delete") {
-    if (!window.confirm("确定删除这个订阅吗？")) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/subscribe/${encodeURIComponent(id)}`, { method: "DELETE" });
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || result.message || "删除失败");
-      }
-      showToast("订阅已删除");
-      await Promise.all([loadSubscriptions(), loadTemplates()]);
-    } catch (error) {
-      showToast(error.message || "删除失败", "error");
-    }
-  }
-});
-
-templatesContainer.addEventListener("click", async (event) => {
-  const target = event.target.closest("button[data-action]");
-  if (!target) {
-    return;
-  }
-
-  const { action, id } = target.dataset;
-  if (!id) {
-    return;
-  }
-
-  if (action === "edit-template") {
-    openTemplateEditor(id);
-    return;
-  }
-
-  if (action === "copy-template-url") {
-    await copyAbsoluteURL(`${API_BASE}/templates/${encodeURIComponent(id)}/render`, "模板下载地址已复制到剪贴板");
-  }
-});
-
-async function loadSubscriptions() {
-  loading.hidden = false;
-  emptyState.hidden = true;
-
-  try {
-    const response = await fetch(`${API_BASE}/subscriptions`);
-    const result = await response.json();
-
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || "加载失败");
-    }
-
-    currentSubscriptions = result.data || [];
-    renderSubscriptions(currentSubscriptions);
-    syncTemplateSubscriptionOptions();
-  } catch (error) {
-    subscriptionsContainer.innerHTML = "";
-    emptyState.hidden = false;
-    emptyState.innerHTML = `<p>${escapeHtml(error.message || "加载失败")}</p>`;
-    showToast(error.message || "加载失败", "error");
-  } finally {
-    loading.hidden = true;
-  }
 }
 
-async function loadTemplates(preferredTemplateID) {
-  try {
-    const response = await fetch(`${API_BASE}/templates`);
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || "加载模板失败");
-    }
-
-    currentTemplates = result.data || [];
-    renderTemplates(currentTemplates);
-
-    if (!currentTemplates.length) {
-      resetTemplateEditor();
-      return;
-    }
-
-    const activeTemplate =
-      currentTemplates.find((item) => item.id === preferredTemplateID) ||
-      currentTemplates.find((item) => item.id === templateForm.elements.id.value) ||
-      currentTemplates.find((item) => item.is_default) ||
-      currentTemplates[0];
-    if (activeTemplate) {
-      fillTemplateEditor(activeTemplate);
-    }
-  } catch (error) {
-    currentTemplates = [];
-    renderTemplates([]);
-    resetTemplateEditor();
-    showToast(error.message || "加载模板失败", "error");
-  }
+function showToast(message, isError = false) {
+  const toast = document.getElementById("toast");
+  const msg = document.getElementById("toast-message");
+  msg.textContent = message;
+  toast.classList.toggle("error", isError);
+  toast.classList.remove("hidden");
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.add("hidden"), 3500);
 }
 
-function renderSubscriptions(subscriptions) {
-  if (!subscriptions.length) {
-    subscriptionsContainer.innerHTML = "";
-    emptyState.hidden = false;
-    emptyState.innerHTML = "<p>还没有订阅，先添加一个。</p>";
-    return;
-  }
-
-  emptyState.hidden = true;
-  subscriptionsContainer.innerHTML = subscriptions
-    .map((subscription) => {
-      const headerCount = Object.keys(subscription.request_headers || {}).length;
-
-      return `
-        <article class="subscription-card">
-          <div class="subscription-head">
-            <h3 class="subscription-name">${escapeHtml(subscription.name)}</h3>
-            <span class="subscription-type">${escapeHtml(subscription.type || "unknown")}</span>
-          </div>
-          <div class="subscription-meta">
-            <div>${escapeHtml(subscription.url)}</div>
-            <div><strong>创建时间：</strong>${formatDate(subscription.created_at)}</div>
-            <div><strong>最近更新：</strong>${formatDate(subscription.updated_at)}</div>
-            <div><strong>文件大小：</strong>${formatFileSize(subscription.file_size || 0)}</div>
-            <div><strong>请求头：</strong>${headerCount} 项</div>
-            <div><strong>Filter：</strong>${escapeHtml(subscription.filter || "未设置")}</div>
-          </div>
-          <div class="subscription-actions">
-            <button class="btn btn-secondary" data-action="copy-download-url" data-id="${escapeHtml(subscription.id)}">复制下载地址</button>
-            <button class="btn btn-secondary" data-action="edit-refresh" data-id="${escapeHtml(subscription.id)}">编辑</button>
-            <button class="btn btn-danger" data-action="delete" data-id="${escapeHtml(subscription.id)}">删除</button>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function renderTemplates(templates) {
-  if (!templates.length) {
-    templatesContainer.innerHTML = "";
-    templateEmptyState.hidden = false;
-    return;
-  }
-
-  templateEmptyState.hidden = true;
-  templatesContainer.innerHTML = templates
-    .map((template) => `
-      <article class="template-card ${template.id === templateForm.elements.id.value ? "active" : ""}">
-        <div class="template-card-head">
-          <h3 class="template-name">${escapeHtml(template.name)}</h3>
-          ${template.is_default ? '<span class="template-badge">默认</span>' : ""}
-        </div>
-        <div class="template-actions">
-          <button type="button" class="btn btn-secondary" data-action="edit-template" data-id="${escapeHtml(template.id)}">编辑</button>
-          <button type="button" class="btn btn-secondary" data-action="copy-template-url" data-id="${escapeHtml(template.id)}">复制地址</button>
-        </div>
-      </article>
-    `)
-    .join("");
-}
-
-function openEditModal(id) {
-  const subscription = currentSubscriptions.find((item) => item.id === id);
-  if (!subscription) {
-    showToast("未找到订阅记录", "error");
-    return;
-  }
-
-  editForm.elements.id.value = subscription.id;
-  editForm.elements.name.value = subscription.name || "";
-  editForm.elements.url.value = subscription.url || "";
-  editForm.elements.type.value = subscription.type || "clash";
-  editForm.elements.filter.value = subscription.filter || "";
-  editRequestHeadersInput.value = stringifyHeaders(subscription.request_headers || {});
-  editModal.classList.remove("hidden");
-}
-
-function closeEditModal() {
-  editModal.classList.add("hidden");
-  editForm.reset();
-  editRequestHeadersInput.value = "";
-}
-
-function openTemplateEditor(id) {
-  const template = currentTemplates.find((item) => item.id === id);
-  if (!template) {
-    showToast("未找到模板", "error");
-    return;
-  }
-  fillTemplateEditor(template);
-  renderTemplates(currentTemplates);
-}
-
-function fillTemplateEditor(template) {
-  templateForm.elements.id.value = template.id || "";
-  templateForm.elements.name.value = template.name || "";
-  templateContentInput.value = template.content || DEFAULT_TEMPLATE_CONTENT;
-  renderTemplateSubscriptionOptions(resolveTemplateSelectedSubscriptionIDs(template));
-  renderTemplates(currentTemplates);
-}
-
-function resetTemplateEditor() {
-  templateForm.reset();
-  templateForm.elements.id.value = "";
-  templateContentInput.value = DEFAULT_TEMPLATE_CONTENT;
-  renderTemplateSubscriptionOptions(getAllSubscriptionIDs());
-  renderTemplates(currentTemplates);
-}
-
-function buildSubscriptionPayload(targetForm) {
-  const formData = new FormData(targetForm);
-  const name = String(formData.get("name") || "").trim();
-  const url = String(formData.get("url") || "").trim();
-  const filter = String(formData.get("filter") || "").trim();
-  const type = String(formData.get("type") || "").trim();
-  const requestHeadersText = String(formData.get("request_headers_text") || "");
-
-  if (!name || !url) {
-    showToast("请填写订阅名称和地址", "error");
-    return null;
-  }
-
-  let requestHeaders;
-  try {
-    requestHeaders = parseHeaders(requestHeadersText);
-  } catch (error) {
-    showToast(error.message, "error");
-    return null;
-  }
-
-  return { name, url, filter, type, request_headers: requestHeaders };
-}
-
-function buildTemplatePayload() {
-  const formData = new FormData(templateForm);
-  const name = String(formData.get("name") || "").trim();
-  const content = String(formData.get("content") || "").trim();
-  const selectedSubscriptionIDs = getCheckedTemplateSubscriptionIDs();
-  const allSubscriptionIDs = getAllSubscriptionIDs();
-
-  if (!name) {
-    showToast("请填写模板名称", "error");
-    return null;
-  }
-  if (!content) {
-    showToast("请填写模板内容", "error");
-    return null;
-  }
-
-  const useAllSubscriptions =
-    allSubscriptionIDs.length === 0 || selectedSubscriptionIDs.length === allSubscriptionIDs.length;
-
-  return {
-    name,
-    content,
-    selected_subscription_ids: useAllSubscriptions ? [] : selectedSubscriptionIDs,
-    use_all_subscriptions: useAllSubscriptions,
-  };
-}
-
-function getAllSubscriptionIDs() {
-  return currentSubscriptions.map((subscription) => subscription.id).filter(Boolean);
-}
-
-function getCheckedTemplateSubscriptionIDs() {
-  return Array.from(
-    templateSubscriptionOptions.querySelectorAll('input[name="selected_subscription_ids"]:checked'),
-  ).map((input) => input.value);
-}
-
-function resolveTemplateSelectedSubscriptionIDs(template) {
-  const allSubscriptionIDs = getAllSubscriptionIDs();
-  if (!template || template.use_all_subscriptions !== false) {
-    return allSubscriptionIDs;
-  }
-
-  const existingIDs = new Set(allSubscriptionIDs);
-  return (template.selected_subscription_ids || []).filter((id) => existingIDs.has(id));
-}
-
-function renderTemplateSubscriptionOptions(selectedSubscriptionIDs) {
-  if (!currentSubscriptions.length) {
-    templateSubscriptionOptions.innerHTML = '<p class="template-subscription-empty">当前还没有订阅，后续添加后会默认全选。</p>';
-    selectAllTemplateSubscriptionsButton.disabled = true;
-    clearTemplateSubscriptionsButton.disabled = true;
-    return;
-  }
-
-  selectAllTemplateSubscriptionsButton.disabled = false;
-  clearTemplateSubscriptionsButton.disabled = false;
-
-  const selectedSet = new Set(selectedSubscriptionIDs);
-  templateSubscriptionOptions.innerHTML = currentSubscriptions
-    .map((subscription) => {
-      const isChecked = selectedSet.has(subscription.id) ? "checked" : "";
-      return `
-        <label class="template-subscription-option">
-          <input type="checkbox" name="selected_subscription_ids" value="${escapeHtml(subscription.id)}" ${isChecked}>
-          <span class="template-subscription-copy">
-            <strong>${escapeHtml(subscription.name || "未命名订阅")}</strong>
-            <span>${escapeHtml(subscription.url || "")}</span>
-          </span>
-        </label>
-      `;
-    })
-    .join("");
-}
-
-function syncTemplateSubscriptionOptions() {
-  const activeTemplate = currentTemplates.find((item) => item.id === templateForm.elements.id.value);
-  if (activeTemplate) {
-    renderTemplateSubscriptionOptions(resolveTemplateSelectedSubscriptionIDs(activeTemplate));
-    return;
-  }
-
-  const hasRenderedOptions = Boolean(
-    templateSubscriptionOptions.querySelector('input[name="selected_subscription_ids"]'),
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(
+    () => showToast("已复制到剪贴板"),
+    () => showToast("复制失败，请手动复制", true)
   );
-  if (hasRenderedOptions) {
-    renderTemplateSubscriptionOptions(getCheckedTemplateSubscriptionIDs());
-    return;
-  }
-
-  renderTemplateSubscriptionOptions(getAllSubscriptionIDs());
 }
 
-async function submitEditForm({ refresh }) {
-  const payload = buildSubscriptionPayload(editForm);
-  if (!payload) {
-    return;
-  }
-
-  const subscriptionID = editForm.elements.id.value;
-  const loadingText = refresh ? "正在更新..." : "正在保存...";
-
-  setSubmitting(editSaveButton, true, refresh ? "仅保存修改" : loadingText);
-  setSubmitting(editSubmitButton, true, refresh ? loadingText : "保存并更新");
-  try {
-    const response = await fetch(
-      refresh
-        ? `${API_BASE}/subscribe/${encodeURIComponent(subscriptionID)}/refresh`
-        : `${API_BASE}/subscribe/${encodeURIComponent(subscriptionID)}`,
-      {
-        method: refresh ? "POST" : "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      },
-    );
-
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || (refresh ? "更新失败" : "保存失败"));
-    }
-
-    closeEditModal();
-    showToast(refresh ? "订阅已更新" : "订阅修改已保存");
-    await Promise.all([loadSubscriptions(), loadTemplates()]);
-  } catch (error) {
-    showToast(error.message || (refresh ? "更新失败" : "保存失败"), "error");
-  } finally {
-    setSubmitting(editSaveButton, false, "仅保存修改");
-    setSubmitting(editSubmitButton, false, "保存并更新");
-  }
+function formatBytes(bytes) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
-function parseHeaders(text) {
+function relativeTime(dateStr) {
+  if (!dateStr) return "—";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "刚刚";
+  if (m < 60) return `${m} 分钟前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} 小时前`;
+  return `${Math.floor(h / 24)} 天前`;
+}
+
+// ── Tab Switching ─────────────────────────────────────────────────────────────
+
+function initTabs() {
+  const tabBtns = document.querySelectorAll(".workspace-tab");
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tabBtns.forEach((b) => {
+        b.classList.remove("is-active");
+        b.setAttribute("aria-selected", "false");
+      });
+      btn.classList.add("is-active");
+      btn.setAttribute("aria-selected", "true");
+
+      const target = btn.dataset.tabTarget;
+      document.querySelectorAll(".workspace-panel").forEach((p) => {
+        p.classList.remove("is-active");
+        p.hidden = true;
+      });
+      const panel = document.getElementById(target);
+      if (panel) {
+        panel.classList.add("is-active");
+        panel.hidden = false;
+      }
+    });
+  });
+}
+
+// ── Quick Action Routing ──────────────────────────────────────────────────────
+
+function initQuickActions() {
+  document.getElementById("hero-subscribe-btn")?.addEventListener("click", () => {
+    switchTab("subscriptions-panel");
+    document.getElementById("subscribe-form")?.querySelector("input[name=name]")?.focus();
+  });
+
+  document.getElementById("hero-template-btn")?.addEventListener("click", () => {
+    switchTab("templates-panel");
+    newTemplate();
+  });
+
+  document.getElementById("default-template-link-btn")?.addEventListener("click", () => {
+    copyToClipboard(`${location.origin}/default-template`);
+  });
+
+  document.getElementById("default-expanded-template-link-btn")?.addEventListener("click", () => {
+    copyToClipboard(`${location.origin}/default-template/proxies`);
+  });
+}
+
+function switchTab(tabId) {
+  const btn = document.querySelector(`[data-tab-target="${tabId}"]`);
+  if (btn) btn.click();
+}
+
+// ── Dashboard Metrics ─────────────────────────────────────────────────────────
+
+function updateDashboardMetrics() {
+  document.getElementById("dashboard-subscription-count").textContent = subscriptions.length;
+
+  const templateCount = document.getElementById("dashboard-template-count");
+  if (templateCount) templateCount.textContent = templates.length;
+}
+
+// ── Advanced Settings Toggle ────────────────────────────────────────────────
+
+function initAdvancedToggle() {
+  document.querySelectorAll("[data-toggle-advanced]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.dataset.toggleAdvanced;
+      const panel = document.getElementById(targetId);
+      if (!panel) return;
+      const isHidden = panel.hidden;
+      panel.hidden = !isHidden;
+      btn.setAttribute("aria-expanded", String(isHidden));
+    });
+  });
+}
+
+// ── Request Headers Helpers ─────────────────────────────────────────────────
+
+function parseHeadersText(text) {
   const headers = {};
-  const lines = text.split(/\r?\n/);
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
+  text.split("\n").forEach((line) => {
+    const idx = line.indexOf(":");
+    if (idx > 0) {
+      const key = line.slice(0, idx).trim();
+      const val = line.slice(idx + 1).trim();
+      if (key && val) headers[key] = val;
     }
-
-    const separatorIndex = trimmed.indexOf(":");
-    if (separatorIndex <= 0) {
-      throw new Error(`请求头格式错误：${trimmed}`);
-    }
-
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const value = trimmed.slice(separatorIndex + 1).trim();
-    if (!key || !value) {
-      throw new Error(`请求头格式错误：${trimmed}`);
-    }
-
-    headers[key] = value;
-  }
-
+  });
   return headers;
 }
 
 function stringifyHeaders(headers) {
-  return Object.entries(headers)
-    .map(([key, value]) => `${key}: ${value}`)
+  return Object.entries(headers || {})
+    .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
 }
 
-function setSubmitting(button, isSubmitting, loadingText) {
-  button.disabled = isSubmitting;
-  if (isSubmitting) {
-    button.dataset.originalText = button.textContent;
-    button.textContent = loadingText;
+// ── Subscription List ─────────────────────────────────────────────────────────
+
+function renderSubscriptionList() {
+  const listEl = document.getElementById("subscriptions");
+  const loadingEl = document.getElementById("loading");
+  const emptyEl = document.getElementById("empty-state");
+
+  if (!listEl) return;
+
+  loadingEl.hidden = true;
+
+  if (subscriptions.length === 0) {
+    listEl.innerHTML = "";
+    emptyEl.hidden = false;
     return;
   }
 
-  button.textContent = button.dataset.originalText || button.textContent;
+  emptyEl.hidden = true;
+  listEl.innerHTML = subscriptions
+    .map(
+      (sub) => `
+    <article class="subscription-card" data-id="${sub.id}">
+      <div class="subscription-head">
+        <h3 class="subscription-name">${escapeHtml(sub.name)}</h3>
+        <span class="subscription-type">${escapeHtml(sub.type || "unknown")}</span>
+      </div>
+      <div class="subscription-meta">
+        <div class="subscription-meta-item">
+          <strong>地址</strong>
+          <span>${escapeHtml(sub.url)}</span>
+        </div>
+        ${sub.filter ? `<div class="subscription-meta-item"><strong>筛选</strong><span>${escapeHtml(sub.filter)}</span></div>` : ""}
+        ${sub.file_size ? `<div class="subscription-meta-item"><strong>大小</strong><span>${formatBytes(sub.file_size)}</span></div>` : ""}
+        ${sub.node_count ? `<div class="subscription-meta-item"><strong>节点</strong><span>${sub.node_count}</span></div>` : ""}
+        <div class="subscription-meta-item">
+          <strong>状态</strong>
+          <span>${sub.status || "active"}</span>
+        </div>
+        ${sub.last_check ? `<div class="subscription-meta-item"><strong>检查</strong><span>${relativeTime(sub.last_check)}</span></div>` : ""}
+        ${Object.keys(sub.request_headers || {}).length > 0 ? `<div class="subscription-meta-item"><strong>请求头</strong><span>${Object.keys(sub.request_headers).length} 条</span></div>` : ""}
+      </div>
+      <div class="subscription-actions">
+        <button type="button" class="btn btn-secondary btn-compact copy-download-btn" data-id="${sub.id}">复制下载地址</button>
+        <button type="button" class="btn btn-secondary btn-compact edit-subscription-btn" data-id="${sub.id}">编辑</button>
+        <button type="button" class="btn btn-secondary btn-compact refresh-subscription-btn" data-id="${sub.id}">刷新</button>
+        <button type="button" class="btn btn-danger btn-compact delete-subscription-btn" data-id="${sub.id}">删除</button>
+      </div>
+    </article>
+  `
+    )
+    .join("");
+
+  // Update subscription-last-updated
+  const lastUpdatedEl = document.getElementById("subscription-last-updated");
+  if (lastUpdatedEl) {
+    const latest = subscriptions.reduce((max, s) => {
+      if (!s.last_check) return max;
+      const t = new Date(s.last_check).getTime();
+      return t > max ? t : max;
+    }, 0);
+    lastUpdatedEl.textContent = latest ? relativeTime(new Date(latest).toISOString()) : "等待数据载入";
+  }
+
+  // Update header usage
+  const headerUsageEl = document.getElementById("subscription-header-usage");
+  if (headerUsageEl) {
+    const count = subscriptions.filter((s) => s.request_headers && Object.keys(s.request_headers).length > 0).length;
+    headerUsageEl.textContent = `${count} 条订阅已配置`;
+  }
+
+  // Bind events
+  listEl.querySelectorAll(".copy-download-btn").forEach((btn) => {
+    btn.addEventListener("click", () => copyToClipboard(`${location.origin}/download/${btn.dataset.id}`));
+  });
+  listEl.querySelectorAll(".edit-subscription-btn").forEach((btn) => {
+    btn.addEventListener("click", () => openEditModal(btn.dataset.id));
+  });
+  listEl.querySelectorAll(".refresh-subscription-btn").forEach((btn) => {
+    btn.addEventListener("click", () => refreshSubscription(btn.dataset.id));
+  });
+  listEl.querySelectorAll(".delete-subscription-btn").forEach((btn) => {
+    btn.addEventListener("click", () => deleteSubscription(btn.dataset.id));
+  });
 }
 
-async function copyAbsoluteURL(pathname, successMessage) {
-  const absoluteURL = new URL(pathname, window.location.origin).toString();
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
 
-  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
-    showToast(`当前浏览器不支持自动复制，请手动复制：${absoluteURL}`, "error");
-    return;
-  }
+// ── Subscription Form ─────────────────────────────────────────────────────────
 
+function initSubscriptionForm() {
+  const form = document.getElementById("subscribe-form");
+  if (!form) return;
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("submit-btn");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "添加中...";
+
+    try {
+      const fd = new FormData(form);
+      const headersText = fd.get("request_headers_text") || "";
+      const payload = {
+        name: fd.get("name"),
+        url: fd.get("url"),
+        type: fd.get("type") || "clash",
+        filter: fd.get("filter") || "",
+        request_headers: parseHeadersText(headersText),
+      };
+
+      const res = await api("/subscribe", { method: "POST", body: JSON.stringify(payload) });
+      if (res.success) {
+        showToast("订阅添加成功");
+        form.reset();
+        document.getElementById("subscription-advanced").hidden = true;
+        await loadSubscriptions();
+        updateDashboardMetrics();
+      } else {
+        showToast(res.error || "添加失败", true);
+      }
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+}
+
+// ── Subscription CRUD ─────────────────────────────────────────────────────────
+
+async function loadSubscriptions() {
   try {
-    await navigator.clipboard.writeText(absoluteURL);
-    showToast(successMessage);
-  } catch (error) {
-    showToast(`复制失败，请手动复制：${absoluteURL}`, "error");
+    const res = await api("/subscriptions");
+    subscriptions = res.data || [];
+    renderSubscriptionList();
+  } catch (err) {
+    showToast("加载订阅失败: " + err.message, true);
   }
 }
 
-function showToast(message, type = "success") {
-  toast.className = `toast ${type}`;
-  toastMessage.textContent = message;
-  toast.classList.remove("hidden");
-
-  window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => {
-    toast.className = "toast hidden";
-  }, 2400);
+async function refreshSubscription(id) {
+  const sub = subscriptions.find((s) => s.id === id);
+  if (!sub) return;
+  try {
+    const res = await api(`/subscribe/${id}/refresh`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: sub.name,
+        url: sub.url,
+        type: sub.type,
+        filter: sub.filter,
+        request_headers: sub.request_headers || {},
+      }),
+    });
+    if (res.success) {
+      showToast("刷新成功");
+      await loadSubscriptions();
+      updateDashboardMetrics();
+    } else {
+      showToast(res.error || "刷新失败", true);
+    }
+  } catch (err) {
+    showToast(err.message, true);
+  }
 }
 
-function formatDate(value) {
-  if (!value) {
-    return "未知";
+async function deleteSubscription(id) {
+  if (!confirm("确定要删除这个订阅吗？")) return;
+  try {
+    const res = await api(`/subscribe/${id}`, { method: "DELETE" });
+    if (res.success) {
+      showToast("已删除");
+      await loadSubscriptions();
+      updateDashboardMetrics();
+    } else {
+      showToast(res.error || "删除失败", true);
+    }
+  } catch (err) {
+    showToast(err.message, true);
   }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "未知";
-  }
-
-  return date.toLocaleString("zh-CN");
 }
 
-function formatFileSize(bytes) {
-  if (!bytes) {
-    return "0 B";
-  }
+// ── Edit Modal ────────────────────────────────────────────────────────────────
 
-  const units = ["B", "KB", "MB", "GB"];
-  let size = bytes;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+function openEditModal(id) {
+  const sub = subscriptions.find((s) => s.id === id);
+  if (!sub) return;
+
+  const modal = document.getElementById("edit-modal");
+  const form = document.getElementById("edit-form");
+  form.reset();
+
+  form.querySelector('[name="id"]').value = sub.id;
+  form.querySelector('[name="name"]').value = sub.name;
+  form.querySelector('[name="url"]').value = sub.url;
+  form.querySelector('[name="type"]').value = sub.type || "clash";
+  form.querySelector('[name="filter"]').value = sub.filter || "";
+  document.getElementById("edit-request-headers-input").value = stringifyHeaders(sub.request_headers);
+
+  modal.classList.remove("hidden");
+
+  // Bind modal buttons
+  document.getElementById("close-edit-modal").onclick = () => modal.classList.add("hidden");
+  document.getElementById("cancel-edit-modal").onclick = () => modal.classList.add("hidden");
+
+  document.getElementById("edit-save-btn").onclick = () => saveEditOnly(id);
+  document.getElementById("edit-submit-btn").onclick = () => saveEditAndRefresh(id);
+
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    saveEditAndRefresh(id);
+  };
 }
 
-function escapeHtml(value) {
-  const node = document.createElement("div");
-  node.textContent = value ?? "";
-  return node.innerHTML;
+async function saveEditOnly(id) {
+  const form = document.getElementById("edit-form");
+  const fd = new FormData(form);
+  try {
+    const res = await api(`/subscribe/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        name: fd.get("name"),
+        url: fd.get("url"),
+        type: fd.get("type"),
+        filter: fd.get("filter"),
+        request_headers: parseHeadersText(fd.get("request_headers_text")),
+      }),
+    });
+    if (res.success) {
+      showToast("保存成功");
+      document.getElementById("edit-modal").classList.add("hidden");
+      await loadSubscriptions();
+      updateDashboardMetrics();
+    } else {
+      showToast(res.error || "保存失败", true);
+    }
+  } catch (err) {
+    showToast(err.message, true);
+  }
 }
 
-Promise.all([loadSubscriptions(), loadTemplates()]).then(() => {
-  if (!currentTemplates.length) {
-    resetTemplateEditor();
+async function saveEditAndRefresh(id) {
+  const form = document.getElementById("edit-form");
+  const fd = new FormData(form);
+  const sub = subscriptions.find((s) => s.id === id);
+  try {
+    const res = await api(`/subscribe/${id}/refresh`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: fd.get("name"),
+        url: fd.get("url"),
+        type: fd.get("type"),
+        filter: fd.get("filter"),
+        request_headers: parseHeadersText(fd.get("request_headers_text")),
+      }),
+    });
+    if (res.success) {
+      showToast("保存并刷新成功");
+      document.getElementById("edit-modal").classList.add("hidden");
+      await loadSubscriptions();
+      updateDashboardMetrics();
+    } else {
+      showToast(res.error || "操作失败", true);
+    }
+  } catch (err) {
+    showToast(err.message, true);
   }
+}
+
+// ── Template List ─────────────────────────────────────────────────────────────
+
+function renderTemplateList() {
+  const listEl = document.getElementById("templates");
+  const emptyEl = document.getElementById("template-empty-state");
+  if (!listEl) return;
+
+  if (templates.length === 0) {
+    listEl.innerHTML = "";
+    emptyEl.hidden = false;
+    return;
+  }
+
+  emptyEl.hidden = true;
+  listEl.innerHTML = templates
+    .map(
+      (t) => `
+    <article class="template-card ${t.id === currentTemplateId ? "active" : ""}" data-id="${t.id}">
+      <div class="template-card-head">
+        <h3 class="template-name">${escapeHtml(t.name)}</h3>
+      </div>
+      <p class="template-card-meta">
+        ${t.use_all_subscriptions ? "使用全部订阅" : `${(t.selected_subscription_ids || []).length} 个订阅`}
+        · ${relativeTime(t.updated_at)}
+      </p>
+      <div class="template-actions">
+        <button type="button" class="btn btn-secondary btn-compact select-template-btn" data-id="${t.id}">选择</button>
+      </div>
+    </article>
+  `
+    )
+    .join("");
+
+  const lastUpdated = document.getElementById("template-last-updated");
+  if (lastUpdated) {
+    const latest = templates.reduce((max, t) => {
+      if (!t.updated_at) return max;
+      const d = new Date(t.updated_at).getTime();
+      return d > max ? d : max;
+    }, 0);
+    lastUpdated.textContent = latest ? relativeTime(new Date(latest).toISOString()) : "等待数据载入";
+  }
+
+  // Bind events
+  listEl.querySelectorAll(".select-template-btn").forEach((btn) => {
+    btn.addEventListener("click", () => selectTemplate(btn.dataset.id));
+  });
+}
+
+async function selectTemplate(id) {
+  try {
+    const res = await api(`/templates/${id}`);
+    if (res.success) {
+      currentTemplateId = id;
+      populateTemplateForm(res.data);
+      renderTemplateList();
+    }
+  } catch (err) {
+    showToast("加载模板失败: " + err.message, true);
+  }
+}
+
+function populateTemplateForm(t) {
+  const form = document.getElementById("template-form");
+  if (!form) return;
+  form.reset();
+  form.querySelector('[name="id"]').value = t.id;
+  form.querySelector('[name="name"]').value = t.name;
+  form.querySelector('[name="content"]').value = t.content;
+  document.getElementById("template-current-name").textContent = t.name;
+  document.getElementById("template-editor-status").textContent = "编辑模式";
+  document.getElementById("template-current-subscription-count").textContent = t.use_all_subscriptions
+    ? "将使用全部订阅"
+    : `${(t.selected_subscription_ids || []).length} 个订阅`;
+
+  // Populate subscription options
+  renderTemplateSubscriptionOptions(t);
+
+  // Show delete button only for existing templates
+  const deleteBtn = document.getElementById("delete-template-btn");
+  if (deleteBtn) deleteBtn.style.display = t.id ? "" : "none";
+}
+
+function renderTemplateSubscriptionOptions(template) {
+  const container = document.getElementById("template-subscription-options");
+  if (!container) return;
+
+  if (subscriptions.length === 0) {
+    container.innerHTML = '<p class="template-subscription-empty">暂无订阅可供选择</p>';
+    return;
+  }
+
+  const useAll = template?.use_all_subscriptions === true;
+  const selected = new Set(template?.selected_subscription_ids || []);
+
+  container.innerHTML = subscriptions
+    .map(
+      (sub) => `
+    <label class="template-subscription-option">
+      <input type="checkbox" name="template-subs" value="${sub.id}" ${useAll || selected.has(sub.id) ? "checked" : ""}>
+      <div class="template-subscription-copy">
+        <strong>${escapeHtml(sub.name)}</strong>
+        <span>${escapeHtml(sub.url)}</span>
+      </div>
+    </label>
+  `
+    )
+    .join("");
+}
+
+// ── Template Form ────────────────────────────────────────────────────────────
+
+function initTemplateForm() {
+  const form = document.getElementById("template-form");
+  if (!form) return;
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("template-submit-btn");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "保存中...";
+
+    try {
+      const fd = new FormData(form);
+      const useAll = fd.get("use_all") === "on";
+      const selectedIds = useAll
+        ? []
+        : Array.from(form.querySelectorAll('input[name="template-subs"]:checked')).map((c) => c.value);
+
+      const payload = {
+        name: fd.get("name"),
+        content: fd.get("content"),
+        use_all_subscriptions: useAll,
+        selected_subscription_ids: selectedIds,
+      };
+
+      const id = fd.get("id");
+      const isNew = !id;
+      const res = isNew
+        ? await api("/templates", { method: "POST", body: JSON.stringify(payload) })
+        : await api(`/templates/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+
+      if (res.success) {
+        showToast(isNew ? "模板创建成功" : "模板更新成功");
+        await loadTemplates();
+        if (res.data?.id) {
+          currentTemplateId = res.data.id;
+          await selectTemplate(res.data.id);
+        }
+        updateDashboardMetrics();
+      } else {
+        showToast(res.error || "保存失败", true);
+      }
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+
+  document.getElementById("copy-template-url-btn")?.addEventListener("click", () => {
+    if (currentTemplateId) copyToClipboard(`${location.origin}/template/${currentTemplateId}`);
+    else showToast("请先选择一个模板", true);
+  });
+
+  document.getElementById("copy-expanded-template-url-btn")?.addEventListener("click", () => {
+    if (currentTemplateId) copyToClipboard(`${location.origin}/template/${currentTemplateId}/proxies`);
+    else showToast("请先选择一个模板", true);
+  });
+
+  document.getElementById("delete-template-btn")?.addEventListener("click", async () => {
+    if (!currentTemplateId) return;
+    if (!confirm("确定要删除这个模板吗？")) return;
+    try {
+      const res = await api(`/templates/${currentTemplateId}`, { method: "DELETE" });
+      if (res.success) {
+        showToast("已删除");
+        currentTemplateId = null;
+        newTemplate();
+        await loadTemplates();
+        updateDashboardMetrics();
+      } else {
+        showToast(res.error || "删除失败", true);
+      }
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+
+  document.getElementById("new-template-btn")?.addEventListener("click", newTemplate);
+
+  document.getElementById("select-all-template-subscriptions-btn")?.addEventListener("click", () => {
+    document.querySelectorAll('#template-form input[name="template-subs"]').forEach((c) => (c.checked = true));
+  });
+
+  document.getElementById("clear-template-subscriptions-btn")?.addEventListener("click", () => {
+    document.querySelectorAll('#template-form input[name="template-subs"]').forEach((c) => (c.checked = false));
+  });
+}
+
+function newTemplate() {
+  currentTemplateId = null;
+  const form = document.getElementById("template-form");
+  if (form) form.reset();
+  document.getElementById("template-editor-status").textContent = "新建模式";
+  document.getElementById("template-current-name").textContent = "未命名模板";
+  document.getElementById("template-current-subscription-count").textContent = "将使用全部订阅";
+  const deleteBtn = document.getElementById("delete-template-btn");
+  if (deleteBtn) deleteBtn.style.display = "none";
+  renderTemplateSubscriptionOptions({});
+  renderTemplateList();
+}
+
+// ── Template CRUD ─────────────────────────────────────────────────────────────
+
+async function loadTemplates() {
+  try {
+    const res = await api("/templates");
+    templates = res.data || [];
+    renderTemplateList();
+  } catch (err) {
+    showToast("加载模板失败: " + err.message, true);
+  }
+}
+
+// ── Reload button ────────────────────────────────────────────────────────────
+
+function initReloadButton() {
+  document.getElementById("reload-subscriptions-btn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("reload-subscriptions-btn");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "刷新中...";
+    try {
+      await loadSubscriptions();
+      await loadTemplates();
+      updateDashboardMetrics();
+      showToast("已刷新");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+document.addEventListener("DOMContentLoaded", async () => {
+  initTabs();
+  initQuickActions();
+  initAdvancedToggle();
+  initSubscriptionForm();
+  initTemplateForm();
+  initReloadButton();
+
+  await loadSubscriptions();
+  await loadTemplates();
+  updateDashboardMetrics();
+  renderTemplateList();
 });

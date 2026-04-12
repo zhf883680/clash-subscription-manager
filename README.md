@@ -6,9 +6,11 @@ A small web app for managing Clash subscription links and cached config files.
 
 ## Screenshots
 
-![Subscription management page](img/1.png)
+![Subscription management page](img/截屏2026-04-12%2013.11.54.png)
 
-![Template management page](img/2.png)
+![Template management page](img/截屏2026-04-12%2013.13.04.png)
+
+![Template editor page](img/截屏2026-04-12%2013.13.17.png)
 
 ## Features
 
@@ -17,7 +19,7 @@ A small web app for managing Clash subscription links and cached config files.
 - Edit subscription URL, provider filter, and headers without refreshing the cached file
 - Refresh a subscription on demand when you want to update the cached file
 - Copy local download URLs from the web UI
-- Manage multiple Clash templates and set one as default
+- Manage multiple Clash templates
 - Edit template YAML directly in the web UI
 - Choose which subscriptions each template should use, defaulting to all subscriptions
 - Download rendered templates with `proxy-providers` generated from the subscriptions selected for that template
@@ -34,19 +36,18 @@ The app reads configuration from `config.yaml` and listens on port `8080` by def
 On startup it logs the current version, for example:
 
 ```text
-starting clash-subscription-manager v1.0.6 on port 8080
+starting clash-subscription-manager v1.0.7 on port 8080
 ```
 
 ## Templates
 
-- Create, edit, delete, and switch between multiple templates in the web UI.
+- Create, edit, and delete multiple templates in the web UI.
 - Subscription editing supports both `Save Changes Only` and `Save and Refresh`.
 - The saved YAML is the base config. When you download a template, the server replaces `proxy-providers` with entries generated from the subscriptions selected for that template.
 - New templates default to selecting all subscriptions, and you can narrow them down per template in the UI.
 - If a subscription has a `filter` value, the renderer writes it into that provider entry. Empty `filter` values are omitted.
 - `Copy Expanded Proxy URL` outputs flattened `proxies` entries and is suitable for clients such as Shadowrocket and Loon.
-- Render URL for a specific template: `/api/templates/{id}/render`
-- Render URL for the default template: `/api/templates/default/render`
+- Template render URL: `/api/templates/{id}/render`
 
 ## Docker
 

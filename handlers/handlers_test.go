@@ -217,6 +217,21 @@ func TestHomeHandlerRendersStaticAssetLinks(t *testing.T) {
 	if strings.Contains(body, `x-auth-token`) {
 		t.Fatalf("body should not contain x-auth-token template: %s", body)
 	}
+	if !strings.Contains(body, `workspace-tabs`) {
+		t.Fatalf("body missing workspace tabs shell: %s", body)
+	}
+	if !strings.Contains(body, `data-tab-target="subscriptions-panel"`) {
+		t.Fatalf("body missing subscriptions tab toggle: %s", body)
+	}
+	if !strings.Contains(body, `data-tab-target="templates-panel"`) {
+		t.Fatalf("body missing templates tab toggle: %s", body)
+	}
+	if !strings.Contains(body, `data-toggle-advanced="subscription-advanced"`) {
+		t.Fatalf("body missing subscription advanced settings toggle: %s", body)
+	}
+	if !strings.Contains(body, `id="dashboard-subscription-count"`) {
+		t.Fatalf("body missing dashboard metric anchor: %s", body)
+	}
 }
 
 func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {

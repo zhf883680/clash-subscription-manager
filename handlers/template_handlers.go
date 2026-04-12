@@ -111,24 +111,6 @@ func (h *Handler) TemplateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) SetDefaultTemplateHandler(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
-	item, err := SetDefaultTemplate(id, filepath.Join(h.config.DataDir, "templates.json"))
-	if err != nil {
-		h.respondJSON(w, http.StatusNotFound, Response{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to set default template: %v", err),
-		})
-		return
-	}
-
-	h.respondJSON(w, http.StatusOK, Response{
-		Success: true,
-		Message: "Template set as default",
-		Data:    item,
-	})
-}
-
 func (h *Handler) RenderTemplateHandler(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 	item, err := GetTemplate(id, filepath.Join(h.config.DataDir, "templates.json"))

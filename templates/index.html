@@ -7,140 +7,243 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="page-shell">
-        <header class="hero">
-            <p class="eyebrow">Clash Subscription Manager</p>
-            <h1>Clash 订阅管理</h1>
-            <p class="hero-copy">添加、保存、下载你的 Clash 订阅文件，不再重复翻找链接。</p>
+    <div class="app-shell">
+        <div class="app-background" aria-hidden="true"></div>
+
+        <header class="hero-panel">
+            <div class="hero-copy">
+                <p class="eyebrow">Clash Subscription Manager</p>
+                <h1>Clash 订阅管理</h1>
+                <p class="hero-summary">一个页面管理订阅和模板配置</p>
+
+                <div class="hero-actions">
+                    <button type="button" id="hero-subscribe-btn" class="btn btn-primary">新增订阅</button>
+                    <button type="button" id="hero-template-btn" class="btn btn-secondary">新建模板</button>
+                </div>
+            </div>
+
+            <div class="hero-metrics">
+                <article class="metric-card">
+                    <span class="metric-label">订阅总数</span>
+                    <strong id="dashboard-subscription-count" class="metric-value">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">模板数量</span>
+                    <strong id="dashboard-template-count" class="metric-value">0</strong>
+                </article>
+            </div>
         </header>
 
-        <main class="layout">
-            <section class="panel form-panel">
-                <div class="panel-heading">
-                    <h2>添加订阅</h2>
-                    <p>输入名称和订阅 URL，系统会抓取并缓存配置文件。</p>
+        <main class="workspace">
+            <div class="workspace-tabs" role="tablist" aria-label="管理工作区">
+                <button
+                    type="button"
+                    id="subscriptions-panel-tab"
+                    class="workspace-tab is-active"
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="subscriptions-panel"
+                    data-tab-target="subscriptions-panel"
+                >
+                    订阅管理
+                </button>
+                <button
+                    type="button"
+                    id="templates-panel-tab"
+                    class="workspace-tab"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="templates-panel"
+                    data-tab-target="templates-panel"
+                >
+                    模板管理
+                </button>
+            </div>
+
+            <section id="subscriptions-panel" class="workspace-panel is-active" role="tabpanel" aria-labelledby="subscriptions-panel-tab">
+                <div class="subscription-grid">
+                    <section class="surface surface-accent">
+                        <div class="surface-heading">
+                            <h2>新增订阅</h2>
+                        </div>
+
+                        <form id="subscribe-form" class="form-stack">
+                            <label class="field">
+                                <span>订阅名称</span>
+                                <input type="text" name="name" maxlength="100" placeholder="例如：日本节点合集" required>
+                            </label>
+
+                            <label class="field">
+                                <span>订阅地址</span>
+                                <input type="url" name="url" placeholder="https://example.com/clash.yaml" required>
+                            </label>
+
+                            <label class="field">
+                                <span>类型</span>
+                                <select name="type">
+                                    <option value="clash">Clash</option>
+                                    <option value="v2ray">V2Ray</option>
+                                    <option value="shadowsocks">Shadowsocks</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </label>
+
+                            <div class="advanced-toggle-row">
+                                <button
+                                    type="button"
+                                    class="btn btn-ghost btn-compact"
+                                    data-toggle-advanced="subscription-advanced"
+                                    aria-expanded="false"
+                                >
+                                    高级设置
+                                </button>
+                            </div>
+
+                            <div id="subscription-advanced" class="advanced-panel" hidden>
+                                <label class="field">
+                                    <span>节点筛选 Filter</span>
+                                    <input type="text" name="filter" placeholder='例如：(?i)港|hk|hongkong|hong kong'>
+                                </label>
+
+                                <label class="field">
+                                    <span>自定义请求头</span>
+                                    <textarea name="request_headers_text" id="request-headers-input" rows="6" placeholder="每行一个 Key: Value"></textarea>
+                                </label>
+                            </div>
+
+                            <div class="form-submit-row">
+                                <button type="submit" id="submit-btn" class="btn btn-primary btn-block">添加订阅</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <section class="surface">
+                        <div class="surface-heading">
+                            <h2>订阅列表</h2>
+                            <button type="button" id="reload-subscriptions-btn" class="btn btn-secondary btn-compact">刷新列表</button>
+                        </div>
+
+                        <div class="list-summary">
+                            <article class="summary-pill">
+                                <span class="summary-label">最近同步</span>
+                                <strong id="subscription-last-updated">等待数据载入</strong>
+                            </article>
+                            <article class="summary-pill">
+                                <span class="summary-label">请求头配置</span>
+                                <strong id="subscription-header-usage">0 条订阅已配置</strong>
+                            </article>
+                        </div>
+
+                        <div id="loading" class="loading">正在加载订阅列表...</div>
+                        <div id="subscriptions" class="subscription-list"></div>
+                        <div id="empty-state" class="empty-state" hidden>
+                            <p>还没有订阅，先从左侧添加一个常用链接。</p>
+                        </div>
+                    </section>
                 </div>
-
-                <form id="subscribe-form" class="stack">
-                    <label class="field">
-                        <span>订阅名称</span>
-                        <input type="text" name="name" maxlength="100" placeholder="例如：日本节点合集" required>
-                    </label>
-
-                    <label class="field">
-                        <span>订阅地址</span>
-                        <input type="url" name="url" placeholder="https://example.com/clash.yaml" required>
-                    </label>
-
-                    <label class="field">
-                        <span>类型</span>
-                        <select name="type">
-                            <option value="clash">Clash</option>
-                            <option value="v2ray">V2Ray</option>
-                            <option value="shadowsocks">Shadowsocks</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </label>
-
-                    <label class="field">
-                        <span>节点筛选 Filter</span>
-                        <input type="text" name="filter" placeholder='例如：(?i)港|hk|hongkong|hong kong'>
-                    </label>
-
-                    <label class="field">
-                        <span>自定义请求头</span>
-                        <textarea name="request_headers_text" id="request-headers-input" rows="6" placeholder="每行一个 Key: Value"></textarea>
-                    </label>
-
-                    <button type="submit" id="submit-btn" class="btn btn-primary">添加订阅</button>
-                </form>
             </section>
 
-            <section class="panel list-panel">
-                <div class="panel-heading">
-                    <h2>订阅列表</h2>
-                    <p>点击“复制下载地址”会把本地缓存文件的下载链接复制到剪贴板。</p>
-                </div>
+            <section id="templates-panel" class="workspace-panel" role="tabpanel" hidden>
+                <div class="template-grid">
+                    <aside class="surface template-sidebar">
+                        <div class="surface-heading">
+                            <h2>模板列表</h2>
+                        </div>
 
-                <div id="loading" class="loading">正在加载订阅列表...</div>
-                <div id="subscriptions" class="subscription-list"></div>
-                <div id="empty-state" class="empty-state" hidden>
-                    <p>还没有订阅，先添加一个。</p>
+                        <div class="sidebar-actions">
+                            <button type="button" id="new-template-btn" class="btn btn-primary btn-block">新建模板</button>
+                        </div>
+
+                        <div class="list-summary compact">
+                            <article class="summary-pill">
+                                <span class="summary-label">最近编辑</span>
+                                <strong id="template-last-updated">等待数据载入</strong>
+                            </article>
+                        </div>
+
+                        <div id="template-empty-state" class="empty-state" hidden>
+                            <p>还没有模板，点击上方按钮创建第一个配置。</p>
+                        </div>
+                        <div id="templates" class="template-list"></div>
+                    </aside>
+
+                    <section class="surface template-editor-surface">
+                        <div class="surface-heading">
+                            <h2>编辑模板</h2>
+                            <span id="template-editor-status" class="surface-badge muted">新建模式</span>
+                        </div>
+
+                        <div class="editor-insights">
+                            <article class="summary-pill">
+                                <span class="summary-label">当前模板</span>
+                                <strong id="template-current-name">未命名模板</strong>
+                            </article>
+                            <article class="summary-pill">
+                                <span class="summary-label">订阅来源</span>
+                                <strong id="template-current-subscription-count">将使用全部订阅</strong>
+                            </article>
+                        </div>
+
+                        <form id="template-form" class="form-stack template-form">
+                            <input type="hidden" name="id">
+
+                            <div class="editor-top-row">
+                                <label class="field">
+                                    <span>模板名称</span>
+                                    <input type="text" name="name" maxlength="100" placeholder="例如：我的主配置" required>
+                                </label>
+
+                                <div class="template-form-actions sticky-actions">
+                                    <button type="submit" id="template-submit-btn" class="btn btn-primary">保存模板</button>
+                                    <button type="button" id="copy-template-url-btn" class="btn btn-ghost">复制模板地址</button>
+                                    <button type="button" id="copy-expanded-template-url-btn" class="btn btn-ghost">复制全节点地址</button>
+                                    <button type="button" id="delete-template-btn" class="btn btn-danger">删除模板</button>
+                                </div>
+                            </div>
+
+                            <fieldset class="field template-subscription-field">
+                                <div class="field-header">
+                                    <div>
+                                        <span>绑定订阅</span>
+                                    </div>
+                                    <div class="template-subscription-actions">
+                                        <button type="button" id="select-all-template-subscriptions-btn" class="btn btn-secondary btn-compact">全选</button>
+                                        <button type="button" id="clear-template-subscriptions-btn" class="btn btn-secondary btn-compact">清空</button>
+                                    </div>
+                                </div>
+                                <div id="template-subscription-options" class="template-subscription-options"></div>
+                            </fieldset>
+
+                            <label class="field editor-field">
+                                <span>模板内容</span>
+                                <textarea name="content" id="template-content-input" rows="20" placeholder="输入基础 YAML 配置" required></textarea>
+                            </label>
+                        </form>
+                    </section>
                 </div>
             </section>
         </main>
-
-        <section class="panel template-panel">
-            <div class="panel-heading">
-                <h2>模板管理</h2>
-                <p>编辑基础 YAML。下载时系统会自动用你为模板勾选的订阅覆盖 `proxy-providers`。</p>
-                <p>说明：系统只会在下载时自动替换 `proxy-providers`，其余 YAML 内容按你输入的原文保留。</p>
-            </div>
-
-            <div class="template-layout">
-                <div class="template-sidebar">
-                    <div class="template-toolbar">
-                        <button type="button" id="new-template-btn" class="btn btn-secondary">新建模板</button>
-                    </div>
-                    <div id="template-empty-state" class="empty-state" hidden>
-                        <p>还没有模板，先新建一个。</p>
-                    </div>
-                    <div id="templates" class="template-list"></div>
-                </div>
-
-                <div class="template-editor">
-                    <form id="template-form" class="stack">
-                        <input type="hidden" name="id">
-
-                        <label class="field">
-                            <span>模板名称</span>
-                            <input type="text" name="name" maxlength="100" placeholder="例如：我的主配置" required>
-                        </label>
-
-                        <fieldset class="field template-subscription-field">
-                            <div class="field-header">
-                                <span>使用哪些订阅</span>
-                                <div class="template-subscription-actions">
-                                    <button type="button" id="select-all-template-subscriptions-btn" class="btn btn-secondary">全选</button>
-                                    <button type="button" id="clear-template-subscriptions-btn" class="btn btn-secondary">清空</button>
-                                </div>
-                            </div>
-                            <div id="template-subscription-options" class="template-subscription-options"></div>
-                        </fieldset>
-
-                        <label class="field">
-                            <span>模板内容</span>
-                            <textarea name="content" id="template-content-input" rows="20" placeholder="输入基础 YAML 配置" required></textarea>
-                        </label>
-
-                        <div class="template-form-actions">
-                            <button type="submit" id="template-submit-btn" class="btn btn-primary">保存模板</button>
-                            <button type="button" id="template-set-default-btn" class="btn btn-secondary">设为默认</button>
-                            <button type="button" id="copy-template-url-btn" class="btn btn-secondary">复制当前模板地址</button>
-                            <button type="button" id="copy-expanded-template-url-btn" class="btn btn-secondary">复制全节点地址</button>
-                            <button type="button" id="delete-template-btn" class="btn btn-danger">删除模板</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </section>
     </div>
 
     <div id="toast" class="toast hidden">
         <span id="toast-message"></span>
     </div>
 
+    <!-- copy-download-wording -->
+    <span id="copy-download-anchor" hidden>复制下载地址</span>
+    <span id="request-headers-anchor" hidden>自定义请求头</span>
+
     <div id="edit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
         <div class="modal-card">
             <div class="modal-heading">
                 <div>
-                    <p class="eyebrow">Edit Subscription</p>
+                    <p class="eyebrow">Subscription Editor</p>
                     <h2 id="edit-modal-title">编辑订阅</h2>
                 </div>
                 <button type="button" id="close-edit-modal" class="icon-button" aria-label="关闭">×</button>
             </div>
 
-            <form id="edit-form" class="stack">
+            <form id="edit-form" class="form-stack">
                 <input type="hidden" name="id">
 
                 <label class="field">
