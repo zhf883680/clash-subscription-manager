@@ -323,9 +323,6 @@ func renderProxyProvidersBlock(providers []templateProvider) string {
 		builder.WriteString("    url: ")
 		builder.WriteString(renderPlainScalar(provider.URL))
 		builder.WriteString("\n")
-		builder.WriteString("    path: ")
-		builder.WriteString(renderPlainScalar(provider.Path))
-		builder.WriteString("\n")
 		if provider.Filter != "" {
 			builder.WriteString("    filter: ")
 			builder.WriteString(renderQuotedScalar(provider.Filter))

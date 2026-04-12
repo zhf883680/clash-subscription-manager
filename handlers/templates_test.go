@@ -152,9 +152,6 @@ rules:
 	if !strings.Contains(body, "additional-prefix: \"West |\"") {
 		t.Fatalf("body missing sanitized additional-prefix: %s", body)
 	}
-	if !strings.Contains(body, "path: ./proxies/west-source.yaml") {
-		t.Fatalf("body missing current file path: %s", body)
-	}
 	if !strings.Contains(body, `filter: "(?i)港|hk|hongkong|hong kong"`) {
 		t.Fatalf("body missing provider filter: %s", body)
 	}

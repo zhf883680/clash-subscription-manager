@@ -591,12 +591,12 @@ function initTemplateForm() {
   });
 
   document.getElementById("copy-template-url-btn")?.addEventListener("click", () => {
-    if (currentTemplateId) copyToClipboard(`${location.origin}/template/${currentTemplateId}`);
+    if (currentTemplateId) copyToClipboard(`${location.origin}/api/templates/${currentTemplateId}/render`);
     else showToast("请先选择一个模板", true);
   });
 
   document.getElementById("copy-expanded-template-url-btn")?.addEventListener("click", () => {
-    if (currentTemplateId) copyToClipboard(`${location.origin}/template/${currentTemplateId}/proxies`);
+    if (currentTemplateId) copyToClipboard(`${location.origin}/api/templates/${currentTemplateId}/render-proxies`);
     else showToast("请先选择一个模板", true);
   });
 

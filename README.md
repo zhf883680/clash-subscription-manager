@@ -2,6 +2,8 @@
 
 A small web app for managing Clash subscription links and cached config files.
 
+> **Note**: Currently only Clash format subscription links are supported.
+
 **[简体中文版 README](README.zh-CN.md)** | English
 
 ## Screenshots
@@ -36,7 +38,7 @@ The app reads configuration from `config.yaml` and listens on port `8080` by def
 On startup it logs the current version, for example:
 
 ```text
-starting clash-subscription-manager v1.0.7 on port 8080
+starting clash-subscription-manager v1.0.8 on port 8080
 ```
 
 ## Templates
