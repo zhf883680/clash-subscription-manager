@@ -1,0 +1,6 @@
+[build]
+  command = "go build -o build/ main.go" # 您的构建命令
+  publish = "build"                      # 您的输出目录
+
+[build.environment]
+  GO_VERSION = "1.21"
