@@ -70,3 +70,6 @@ docker run --rm -p 8080:8080 \
 
 - **GitHub 仓库**: https://github.com/zhf883680/clash-subscription-manager
 - **Docker Hub 镜像**: https://hub.docker.com/r/zhf883680/clash-subscription-manager
+
+## 感谢
+[tindy2013/subconverter](https://github.com/tindy2013/subconverter)
