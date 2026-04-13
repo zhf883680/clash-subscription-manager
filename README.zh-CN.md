@@ -1,8 +1,6 @@
 # Clash 订阅管理器
 
-一个用于管理 Clash 订阅链接和缓存配置文件的小型 Web 应用。
-
-> **注意**：目前仅支持 Clash 格式的订阅链接。
+一个用于管理 Clash 订阅链接和缓存配置文件的小型 Web 应用，支持自动识别订阅格式并转换为 Clash YAML。
 
 **[English Version](README.md)** | 简体中文
 
@@ -16,8 +14,9 @@
 
 ## 功能特性
 
-- 通过 URL 添加 Clash 订阅
-- 在本地保存下载的配置文件
+- 通过 URL 添加订阅，并自动将支持的格式转换为 Clash YAML
+- 支持直接导入 Clash 订阅，以及自动转换 SS、VMess、Trojan、VLESS 链接
+- 在本地保存转换后的配置文件
 - 仅修改订阅 URL、节点筛选 Filter、请求头等信息，不刷新缓存文件
 - 按需手动更新订阅并刷新缓存文件
 - 通过 Web 界面复制本地下载链接
@@ -38,7 +37,7 @@ go run .
 启动时会输出当前版本，例如：
 
 ```text
-starting clash-subscription-manager v1.0.8 on port 8080
+starting clash-subscription-manager v1.0.9 on port 8080
 ```
 
 ## 模板说明

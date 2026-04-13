@@ -1,8 +1,6 @@
 # Clash Subscription Manager
 
-A small web app for managing Clash subscription links and cached config files.
-
-> **Note**: Currently only Clash format subscription links are supported.
+A small web app for managing Clash subscription links and cached config files, with automatic subscription format detection and conversion.
 
 **[简体中文版 README](README.zh-CN.md)** | English
 
@@ -16,8 +14,9 @@ A small web app for managing Clash subscription links and cached config files.
 
 ## Features
 
-- Add Clash subscriptions from a URL
-- Save downloaded configs locally
+- Add subscription URLs and automatically convert supported formats to Clash YAML
+- Support direct Clash subscriptions plus automatic conversion for SS, VMess, Trojan, and VLESS links
+- Save converted configs locally
 - Edit subscription URL, provider filter, and headers without refreshing the cached file
 - Refresh a subscription on demand when you want to update the cached file
 - Copy local download URLs from the web UI
@@ -38,7 +37,7 @@ The app reads configuration from `config.yaml` and listens on port `8080` by def
 On startup it logs the current version, for example:
 
 ```text
-starting clash-subscription-manager v1.0.8 on port 8080
+starting clash-subscription-manager v1.0.9 on port 8080
 ```
 
 ## Templates
