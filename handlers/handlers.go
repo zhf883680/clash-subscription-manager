@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"clash-subscription-manager/converter"
 	"clash-subscription-manager/models"
 
 	"github.com/gorilla/mux"
@@ -211,7 +212,16 @@ func (h *Handler) SubscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath, err := h.storeSubscriptionFile(sub.Name, content)
+	convertedContent, summary, err := converter.ConvertToClash(content)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Unsupported subscription content: %v", err),
+		})
+		return
+	}
+
+	filePath, err := h.storeSubscriptionFile(sub.Name, convertedContent)
 	if err != nil {
 		h.respondJSON(w, http.StatusInternalServerError, Response{
 			Success: false,
@@ -221,7 +231,9 @@ func (h *Handler) SubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sub.FilePath = filePath
-	sub.FileSize = int64(len(content))
+	sub.FileSize = int64(len(convertedContent))
+	sub.Type = summary.DetectedType
+	sub.NodeCount = summary.NodeCount
 
 	// Add subscription
 	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
@@ -356,10 +368,6 @@ func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Requ
 	if rawURL == "" {
 		rawURL = current.URL
 	}
-	subType := payload.Type
-	if subType == "" {
-		subType = current.Type
-	}
 	filter := payload.Filter
 	requestHeaders := payload.RequestHeaders
 	if requestHeaders == nil {
@@ -375,9 +383,18 @@ func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	convertedContent, summary, err := converter.ConvertToClash(content)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Unsupported subscription content: %v", err),
+		})
+		return
+	}
+
 	filePath := current.FilePath
 	if filePath == "" {
-		filePath, err = h.storeSubscriptionFile(name, content)
+		filePath, err = h.storeSubscriptionFile(name, convertedContent)
 		if err != nil {
 			h.respondJSON(w, http.StatusInternalServerError, Response{
 				Success: false,
@@ -386,7 +403,7 @@ func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	} else {
-		if err := os.WriteFile(filepath.Join(h.config.DataDir, filePath), content, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(h.config.DataDir, filePath), convertedContent, 0644); err != nil {
 			h.respondJSON(w, http.StatusInternalServerError, Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to update cached file: %v", err),
@@ -400,13 +417,14 @@ func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Requ
 		sub.Name = name
 		sub.URL = rawURL
 		sub.Filter = filter
-		sub.Type = subType
+		sub.Type = summary.DetectedType
 		sub.RequestHeaders = requestHeaders
 		sub.FilePath = filePath
-		sub.FileSize = int64(len(content))
+		sub.FileSize = int64(len(convertedContent))
 		sub.UpdatedAt = now
 		sub.LastCheck = now
 		sub.Status = "active"
+		sub.NodeCount = summary.NodeCount
 		return nil
 	})
 	if err != nil {

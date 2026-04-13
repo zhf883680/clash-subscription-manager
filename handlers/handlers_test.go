@@ -34,7 +34,7 @@ func TestSubscribeHandlerDownloadsAndStoresSubscriptionFile(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("proxy-config-data")),
+				Body:       io.NopCloser(strings.NewReader("ss://YWVzLTI1Ni1nY206cGFzcw==@example.com:443#demo")),
 			}, nil
 		}),
 	}
@@ -69,8 +69,11 @@ func TestSubscribeHandlerDownloadsAndStoresSubscriptionFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.ReadFile(%q) error = %v", storedPath, err)
 	}
-	if string(content) != "proxy-config-data" {
-		t.Fatalf("stored content = %q, want %q", string(content), "proxy-config-data")
+	if !strings.Contains(string(content), "type: ss") {
+		t.Fatalf("stored content missing converted ss node:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "server: example.com") {
+		t.Fatalf("stored content missing converted server:\n%s", string(content))
 	}
 
 	subs, err := ListSubscriptions(filepath.Join(dataDir, "subscriptions.json"))
@@ -94,6 +97,12 @@ func TestSubscribeHandlerDownloadsAndStoresSubscriptionFile(t *testing.T) {
 	}
 	if got := subs[0].Filter; got != "(?i)港|hk|hongkong|hong kong" {
 		t.Fatalf("saved filter = %q, want %q", got, "(?i)港|hk|hongkong|hong kong")
+	}
+	if got := subs[0].Type; got != "ss" {
+		t.Fatalf("saved type = %q, want %q", got, "ss")
+	}
+	if got := subs[0].NodeCount; got != 1 {
+		t.Fatalf("saved node count = %d, want 1", got)
 	}
 }
 
@@ -208,6 +217,15 @@ func TestHomeHandlerRendersStaticAssetLinks(t *testing.T) {
 	if !strings.Contains(body, `自定义请求头`) {
 		t.Fatalf("body missing request headers wording: %s", body)
 	}
+	if !strings.Contains(body, `协议类型会在下载后自动识别并转换`) {
+		t.Fatalf("body missing auto-detect hint for subscription type: %s", body)
+	}
+	if !strings.Contains(body, `保存后刷新时会重新自动识别类型并更新缓存文件`) {
+		t.Fatalf("body missing auto-detect hint for edit form: %s", body)
+	}
+	if strings.Contains(body, `name="type"`) {
+		t.Fatalf("body should not contain subscription type selector: %s", body)
+	}
 	if strings.Contains(body, `复制默认模板地址`) {
 		t.Fatalf("body should not contain default template copy button: %s", body)
 	}
@@ -273,7 +291,7 @@ func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("new-content")),
+				Body:       io.NopCloser(strings.NewReader("trojan://secret@trojan.example.com:443?type=ws&host=cdn.example.com&path=%2Fws&sni=edge.example.com#trojan-demo")),
 			}, nil
 		}),
 	}
@@ -299,8 +317,11 @@ func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.ReadFile(%q) error = %v", cachedPath, err)
 	}
-	if string(content) != "new-content" {
-		t.Fatalf("cached content = %q, want %q", string(content), "new-content")
+	if !strings.Contains(string(content), "type: trojan") {
+		t.Fatalf("cached content missing converted trojan node:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "servername: edge.example.com") {
+		t.Fatalf("cached content missing converted sni:\n%s", string(content))
 	}
 
 	sub, err := GetSubscription("sub-1", filepath.Join(dataDir, "subscriptions.json"))
@@ -313,14 +334,20 @@ func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 	if sub.URL != "https://example.com/new" {
 		t.Fatalf("url = %q, want %q", sub.URL, "https://example.com/new")
 	}
-	if sub.FileSize != int64(len("new-content")) {
-		t.Fatalf("file size = %d, want %d", sub.FileSize, len("new-content"))
+	if sub.FileSize != int64(len(content)) {
+		t.Fatalf("file size = %d, want %d", sub.FileSize, len(content))
 	}
 	if sub.RequestHeaders["User-Agent"] != "after-agent" {
 		t.Fatalf("request header User-Agent = %q, want %q", sub.RequestHeaders["User-Agent"], "after-agent")
 	}
 	if sub.Filter != "(?i)港|hk|hongkong|hong kong" {
 		t.Fatalf("filter = %q, want %q", sub.Filter, "(?i)港|hk|hongkong|hong kong")
+	}
+	if sub.Type != "trojan" {
+		t.Fatalf("type = %q, want %q", sub.Type, "trojan")
+	}
+	if sub.NodeCount != 1 {
+		t.Fatalf("node count = %d, want 1", sub.NodeCount)
 	}
 }
 
@@ -334,13 +361,13 @@ func TestUpdateSubscriptionWithoutRefreshKeepsCachedFile(t *testing.T) {
 	updatedAt := time.Now().Add(-time.Hour).UTC()
 	err := SaveSubscriptions([]models.Subscription{
 		{
-			ID:       "sub-1",
-			Name:     "before",
-			URL:      "https://example.com/old",
-			Filter:   "旧规则",
-			Type:     "clash",
-			FilePath: cachedName,
-			FileSize: int64(len("cached-content")),
+			ID:        "sub-1",
+			Name:      "before",
+			URL:       "https://example.com/old",
+			Filter:    "旧规则",
+			Type:      "clash",
+			FilePath:  cachedName,
+			FileSize:  int64(len("cached-content")),
 			UpdatedAt: updatedAt,
 			LastCheck: lastCheck,
 			RequestHeaders: map[string]string{
@@ -421,7 +448,7 @@ func TestSubscribeHandlerDecompressesGzipResponseWhenAcceptEncodingHeaderIsSet(t
 
 			var buffer bytes.Buffer
 			zipWriter := gzip.NewWriter(&buffer)
-			if _, err := zipWriter.Write([]byte("yaml-content")); err != nil {
+			if _, err := zipWriter.Write([]byte("proxies:\n  - name: zipped\n    type: ss\n    server: zip.example.com\n    port: 443\n    cipher: aes-256-gcm\n    password: pass\n")); err != nil {
 				t.Fatalf("gzip write error = %v", err)
 			}
 			if err := zipWriter.Close(); err != nil {
@@ -457,8 +484,52 @@ func TestSubscribeHandlerDecompressesGzipResponseWhenAcceptEncodingHeaderIsSet(t
 	if err != nil {
 		t.Fatalf("os.ReadFile() error = %v", err)
 	}
-	if string(content) != "yaml-content" {
-		t.Fatalf("stored content = %q, want %q", string(content), "yaml-content")
+	if !strings.Contains(string(content), "name: zipped") {
+		t.Fatalf("stored content = %q, want clash yaml content", string(content))
+	}
+}
+
+func TestSubscribeHandlerRejectsUnsupportedSubscriptionContent(t *testing.T) {
+	dataDir := t.TempDir()
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+	})
+	handler.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("not-a-subscription")),
+			}, nil
+		}),
+	}
+
+	body := bytes.NewBufferString(`{"name":"bad","url":"https://example.com/subscription"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe", body)
+	rec := httptest.NewRecorder()
+
+	handler.SubscribeHandler(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+
+	subs, err := ListSubscriptions(filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("ListSubscriptions() error = %v", err)
+	}
+	if len(subs) != 0 {
+		t.Fatalf("len(subs) = %d, want 0", len(subs))
+	}
+
+	matches, err := filepath.Glob(filepath.Join(dataDir, "*.yaml"))
+	if err != nil {
+		t.Fatalf("filepath.Glob() error = %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("unexpected cached files: %v", matches)
 	}
 }
 

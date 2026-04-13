@@ -76,16 +76,7 @@
                             <label class="field">
                                 <span>订阅地址</span>
                                 <input type="url" name="url" placeholder="https://example.com/clash.yaml" required>
-                            </label>
-
-                            <label class="field">
-                                <span>类型</span>
-                                <select name="type">
-                                    <option value="clash">Clash</option>
-                                    <option value="v2ray">V2Ray</option>
-                                    <option value="shadowsocks">Shadowsocks</option>
-                                    <option value="other">Other</option>
-                                </select>
+                                <p class="field-note">协议类型会在下载后自动识别并转换，无需手动选择。</p>
                             </label>
 
                             <div class="advanced-toggle-row">
@@ -254,16 +245,7 @@
                 <label class="field">
                     <span>订阅地址</span>
                     <input type="url" name="url" required>
-                </label>
-
-                <label class="field">
-                    <span>类型</span>
-                    <select name="type">
-                        <option value="clash">Clash</option>
-                        <option value="v2ray">V2Ray</option>
-                        <option value="shadowsocks">Shadowsocks</option>
-                        <option value="other">Other</option>
-                    </select>
+                    <p class="field-note">保存后刷新时会重新自动识别类型并更新缓存文件。</p>
                 </label>
 
                 <label class="field">

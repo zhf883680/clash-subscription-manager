@@ -153,6 +153,24 @@ function stringifyHeaders(headers) {
     .join("\n");
 }
 
+function formatSubscriptionType(type) {
+  const normalized = (type || "unknown").toLowerCase();
+  const labels = {
+    clash: "Clash",
+    mixed: "混合订阅",
+    ss: "Shadowsocks",
+    vmess: "VMess",
+    trojan: "Trojan",
+    vless: "VLESS",
+    unknown: "待识别",
+  };
+
+  return {
+    label: labels[normalized] || normalized.toUpperCase(),
+    tone: ["mixed", "unknown"].includes(normalized) ? normalized : "known",
+  };
+}
+
 // ── Subscription List ─────────────────────────────────────────────────────────
 
 function renderSubscriptionList() {
@@ -172,12 +190,13 @@ function renderSubscriptionList() {
 
   emptyEl.hidden = true;
   listEl.innerHTML = subscriptions
-    .map(
-      (sub) => `
+    .map((sub) => {
+      const typeMeta = formatSubscriptionType(sub.type);
+      return `
     <article class="subscription-card" data-id="${sub.id}">
       <div class="subscription-head">
         <h3 class="subscription-name">${escapeHtml(sub.name)}</h3>
-        <span class="subscription-type">${escapeHtml(sub.type || "unknown")}</span>
+        <span class="subscription-type subscription-type-${escapeHtml(typeMeta.tone)}">${escapeHtml(typeMeta.label)}</span>
       </div>
       <div class="subscription-meta">
         <div class="subscription-meta-item">
@@ -202,7 +221,7 @@ function renderSubscriptionList() {
       </div>
     </article>
   `
-    )
+    })
     .join("");
 
   // Update subscription-last-updated
@@ -263,7 +282,6 @@ function initSubscriptionForm() {
       const payload = {
         name: fd.get("name"),
         url: fd.get("url"),
-        type: fd.get("type") || "clash",
         filter: fd.get("filter") || "",
         request_headers: parseHeadersText(headersText),
       };
@@ -308,7 +326,6 @@ async function refreshSubscription(id) {
       body: JSON.stringify({
         name: sub.name,
         url: sub.url,
-        type: sub.type,
         filter: sub.filter,
         request_headers: sub.request_headers || {},
       }),
@@ -354,7 +371,6 @@ function openEditModal(id) {
   form.querySelector('[name="id"]').value = sub.id;
   form.querySelector('[name="name"]').value = sub.name;
   form.querySelector('[name="url"]').value = sub.url;
-  form.querySelector('[name="type"]').value = sub.type || "clash";
   form.querySelector('[name="filter"]').value = sub.filter || "";
   document.getElementById("edit-request-headers-input").value = stringifyHeaders(sub.request_headers);
 
@@ -382,7 +398,6 @@ async function saveEditOnly(id) {
       body: JSON.stringify({
         name: fd.get("name"),
         url: fd.get("url"),
-        type: fd.get("type"),
         filter: fd.get("filter"),
         request_headers: parseHeadersText(fd.get("request_headers_text")),
       }),
@@ -410,7 +425,6 @@ async function saveEditAndRefresh(id) {
       body: JSON.stringify({
         name: fd.get("name"),
         url: fd.get("url"),
-        type: fd.get("type"),
         filter: fd.get("filter"),
         request_headers: parseHeadersText(fd.get("request_headers_text")),
       }),
