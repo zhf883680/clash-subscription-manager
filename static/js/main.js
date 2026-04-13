@@ -387,13 +387,24 @@ function openEditModal(id) {
 
   const modal = document.getElementById("edit-modal");
   const form = document.getElementById("edit-form");
+  const idInput = document.getElementById("edit-subscription-id-input");
+  const nameInput = document.getElementById("edit-subscription-name-input");
+  const urlInput = document.getElementById("edit-subscription-url-input");
+  const filterInput = document.getElementById("edit-subscription-filter-input");
+  const headersInput = document.getElementById("edit-request-headers-input");
+
+  if (!modal || !form || !idInput || !nameInput || !urlInput || !filterInput || !headersInput) {
+    showToast("编辑表单加载失败，请刷新页面后重试", true);
+    return;
+  }
+
   form.reset();
 
-  form.querySelector('[name="id"]').value = sub.id;
-  form.querySelector('[name="name"]').value = sub.name;
-  form.querySelector('[name="url"]').value = sub.url;
-  form.querySelector('[name="filter"]').value = sub.filter || "";
-  document.getElementById("edit-request-headers-input").value = stringifyHeaders(sub.request_headers);
+  idInput.value = sub.id;
+  nameInput.value = sub.name;
+  urlInput.value = sub.url;
+  filterInput.value = sub.filter || "";
+  headersInput.value = stringifyHeaders(sub.request_headers);
 
   modal.classList.remove("hidden");
 

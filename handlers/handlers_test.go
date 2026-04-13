@@ -223,6 +223,18 @@ func TestHomeHandlerRendersStaticAssetLinks(t *testing.T) {
 	if !strings.Contains(body, `保存后刷新时会重新自动识别类型并更新缓存文件`) {
 		t.Fatalf("body missing auto-detect hint for edit form: %s", body)
 	}
+	if !strings.Contains(body, `id="edit-subscription-name-input"`) {
+		t.Fatalf("body missing edit subscription name input id: %s", body)
+	}
+	if !strings.Contains(body, `id="edit-subscription-url-input"`) {
+		t.Fatalf("body missing edit subscription url input id: %s", body)
+	}
+	if !strings.Contains(body, `id="edit-subscription-filter-input"`) {
+		t.Fatalf("body missing edit subscription filter input id: %s", body)
+	}
+	if !strings.Contains(body, `id="edit-request-headers-input"`) {
+		t.Fatalf("body missing edit request headers input id: %s", body)
+	}
 	if strings.Contains(body, `name="type"`) {
 		t.Fatalf("body should not contain subscription type selector: %s", body)
 	}

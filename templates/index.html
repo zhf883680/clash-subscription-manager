@@ -235,22 +235,22 @@
             </div>
 
             <form id="edit-form" class="form-stack">
-                <input type="hidden" name="id">
+                <input type="hidden" id="edit-subscription-id-input" name="id">
 
                 <label class="field">
                     <span>订阅名称</span>
-                    <input type="text" name="name" maxlength="100" required>
+                    <input type="text" id="edit-subscription-name-input" name="name" maxlength="100" required>
                 </label>
 
                 <label class="field">
                     <span>订阅地址</span>
-                    <input type="url" name="url" required>
+                    <input type="url" id="edit-subscription-url-input" name="url" required>
                     <p class="field-note">保存后刷新时会重新自动识别类型并更新缓存文件。</p>
                 </label>
 
                 <label class="field">
                     <span>节点筛选 Filter</span>
-                    <input type="text" name="filter" placeholder='例如：(?i)港|hk|hongkong|hong kong'>
+                    <input type="text" id="edit-subscription-filter-input" name="filter" placeholder='例如：(?i)港|hk|hongkong|hong kong'>
                 </label>
 
                 <label class="field">
