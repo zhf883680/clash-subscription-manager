@@ -37,7 +37,7 @@ The app reads configuration from `config.yaml` and listens on port `8080` by def
 On startup it logs the current version, for example:
 
 ```text
-starting clash-subscription-manager v1.0.9 on port 8080
+starting clash-subscription-manager v1.0.10 on port 8080
 ```
 
 ## Templates

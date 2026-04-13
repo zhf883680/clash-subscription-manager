@@ -37,7 +37,7 @@ go run .
 启动时会输出当前版本，例如：
 
 ```text
-starting clash-subscription-manager v1.0.9 on port 8080
+starting clash-subscription-manager v1.0.10 on port 8080
 ```
 
 ## 模板说明

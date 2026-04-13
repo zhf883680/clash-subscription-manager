@@ -342,15 +342,6 @@ func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Requ
 	id := vars["id"]
 	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
 
-	current, err := GetSubscription(id, dataFile)
-	if err != nil {
-		h.respondJSON(w, http.StatusNotFound, Response{
-			Success: false,
-			Error:   fmt.Sprintf("Subscription not found: %v", err),
-		})
-		return
-	}
-
 	payload, err := decodeSubscriptionPayload(r)
 	if err != nil {
 		h.respondJSON(w, http.StatusBadRequest, Response{
@@ -360,77 +351,16 @@ func (h *Handler) RefreshSubscriptionHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	name := payload.Name
-	if name == "" {
-		name = current.Name
-	}
-	rawURL := payload.URL
-	if rawURL == "" {
-		rawURL = current.URL
-	}
-	filter := payload.Filter
-	requestHeaders := payload.RequestHeaders
-	if requestHeaders == nil {
-		requestHeaders = current.RequestHeaders
-	}
-
-	content, err := h.downloadSubscriptionContent(rawURL, requestHeaders)
+	updatedSub, err := h.refreshSubscription(id, dataFile, payload)
 	if err != nil {
-		h.respondJSON(w, http.StatusBadGateway, Response{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to refresh subscription: %v", err),
-		})
-		return
-	}
-
-	convertedContent, summary, err := converter.ConvertToClash(content)
-	if err != nil {
-		h.respondJSON(w, http.StatusBadRequest, Response{
-			Success: false,
-			Error:   fmt.Sprintf("Unsupported subscription content: %v", err),
-		})
-		return
-	}
-
-	filePath := current.FilePath
-	if filePath == "" {
-		filePath, err = h.storeSubscriptionFile(name, convertedContent)
-		if err != nil {
-			h.respondJSON(w, http.StatusInternalServerError, Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to store subscription file: %v", err),
-			})
-			return
+		statusCode := http.StatusInternalServerError
+		if refreshErr, ok := err.(*refreshFailure); ok {
+			statusCode = refreshErr.statusCode
 		}
-	} else {
-		if err := os.WriteFile(filepath.Join(h.config.DataDir, filePath), convertedContent, 0644); err != nil {
-			h.respondJSON(w, http.StatusInternalServerError, Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to update cached file: %v", err),
-			})
-			return
-		}
-	}
-
-	now := time.Now()
-	updatedSub, err := UpdateSubscription(id, dataFile, func(sub *models.Subscription) error {
-		sub.Name = name
-		sub.URL = rawURL
-		sub.Filter = filter
-		sub.Type = summary.DetectedType
-		sub.RequestHeaders = requestHeaders
-		sub.FilePath = filePath
-		sub.FileSize = int64(len(convertedContent))
-		sub.UpdatedAt = now
-		sub.LastCheck = now
-		sub.Status = "active"
-		sub.NodeCount = summary.NodeCount
-		return nil
-	})
-	if err != nil {
-		h.respondJSON(w, http.StatusInternalServerError, Response{
+		h.respondJSON(w, statusCode, Response{
 			Success: false,
-			Error:   fmt.Sprintf("Failed to update subscription: %v", err),
+			Error:   err.Error(),
+			Data:    updatedSub,
 		})
 		return
 	}

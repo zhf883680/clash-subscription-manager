@@ -351,6 +351,205 @@ func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 	}
 }
 
+func TestRefreshSubscriptionFailurePreservesCachedFileAndRecordsError(t *testing.T) {
+	dataDir := t.TempDir()
+	cachedName := "sub-1.yaml"
+	cachedPath := filepath.Join(dataDir, cachedName)
+	writeHandlerTestFile(t, cachedPath, []byte("old-content"))
+
+	lastCheck := time.Now().Add(-3 * time.Hour).UTC()
+	err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-1",
+			Name:      "before",
+			URL:       "https://example.com/old",
+			Type:      "clash",
+			FilePath:  cachedName,
+			FileSize:  int64(len("old-content")),
+			LastCheck: lastCheck,
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+	})
+	handler.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("network timeout")
+		}),
+	}
+
+	body := bytes.NewBufferString(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe/sub-1/refresh", body)
+	req = mux.SetURLVars(req, map[string]string{"id": "sub-1"})
+	rec := httptest.NewRecorder()
+
+	handler.RefreshSubscriptionHandler(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadGateway, rec.Body.String())
+	}
+
+	content, err := os.ReadFile(cachedPath)
+	if err != nil {
+		t.Fatalf("os.ReadFile(%q) error = %v", cachedPath, err)
+	}
+	if string(content) != "old-content" {
+		t.Fatalf("cached content = %q, want %q", string(content), "old-content")
+	}
+
+	sub, err := GetSubscription("sub-1", filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("GetSubscription() error = %v", err)
+	}
+	if sub.FilePath != cachedName {
+		t.Fatalf("file path = %q, want %q", sub.FilePath, cachedName)
+	}
+	if sub.FileSize != int64(len("old-content")) {
+		t.Fatalf("file size = %d, want %d", sub.FileSize, len("old-content"))
+	}
+	if got := sub.LastError; !strings.Contains(got, "network timeout") {
+		t.Fatalf("last error = %q, want to contain %q", got, "network timeout")
+	}
+	if sub.LastErrorTime.IsZero() {
+		t.Fatal("last error time should be set on refresh failure")
+	}
+	if !sub.LastCheck.Equal(lastCheck) {
+		t.Fatalf("last check = %s, want %s", sub.LastCheck, lastCheck)
+	}
+}
+
+func TestRefreshSubscriptionSuccessClearsPreviousError(t *testing.T) {
+	dataDir := t.TempDir()
+	cachedName := "sub-1.yaml"
+	cachedPath := filepath.Join(dataDir, cachedName)
+	writeHandlerTestFile(t, cachedPath, []byte("old-content"))
+
+	lastErrorTime := time.Now().Add(-time.Hour).UTC()
+	err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:            "sub-1",
+			Name:          "before",
+			URL:           "https://example.com/old",
+			Type:          "clash",
+			FilePath:      cachedName,
+			FileSize:      int64(len("old-content")),
+			Status:        "active",
+			LastError:     "download failed with status: 500",
+			LastErrorTime: lastErrorTime,
+		},
+	}, filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+	})
+	handler.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("ss://YWVzLTI1Ni1nY206cGFzcw==@example.com:443#demo")),
+			}, nil
+		}),
+	}
+
+	body := bytes.NewBufferString(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe/sub-1/refresh", body)
+	req = mux.SetURLVars(req, map[string]string{"id": "sub-1"})
+	rec := httptest.NewRecorder()
+
+	handler.RefreshSubscriptionHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	content, err := os.ReadFile(cachedPath)
+	if err != nil {
+		t.Fatalf("os.ReadFile(%q) error = %v", cachedPath, err)
+	}
+	if !strings.Contains(string(content), "type: ss") {
+		t.Fatalf("cached content missing converted ss node:\n%s", string(content))
+	}
+
+	sub, err := GetSubscription("sub-1", filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("GetSubscription() error = %v", err)
+	}
+	if sub.LastError != "" {
+		t.Fatalf("last error = %q, want empty", sub.LastError)
+	}
+	if !sub.LastErrorTime.IsZero() {
+		t.Fatalf("last error time = %s, want zero", sub.LastErrorTime)
+	}
+}
+
+func TestRefreshSubscriptionFileWriteFailureRecordsError(t *testing.T) {
+	dataDir := t.TempDir()
+	err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:       "sub-1",
+			Name:     "before",
+			URL:      "https://example.com/old",
+			Type:     "clash",
+			FilePath: filepath.Join("missing", "sub-1.yaml"),
+			FileSize: int64(len("old-content")),
+			Status:   "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+	})
+	handler.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("ss://YWVzLTI1Ni1nY206cGFzcw==@example.com:443#demo")),
+			}, nil
+		}),
+	}
+
+	body := bytes.NewBufferString(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe/sub-1/refresh", body)
+	req = mux.SetURLVars(req, map[string]string{"id": "sub-1"})
+	rec := httptest.NewRecorder()
+
+	handler.RefreshSubscriptionHandler(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusInternalServerError, rec.Body.String())
+	}
+
+	sub, err := GetSubscription("sub-1", filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("GetSubscription() error = %v", err)
+	}
+	if got := sub.LastError; !strings.Contains(got, "no such file or directory") {
+		t.Fatalf("last error = %q, want filesystem failure", got)
+	}
+	if sub.LastErrorTime.IsZero() {
+		t.Fatal("last error time should be set on filesystem failure")
+	}
+}
+
 func TestUpdateSubscriptionWithoutRefreshKeepsCachedFile(t *testing.T) {
 	dataDir := t.TempDir()
 	cachedName := "sub-1.yaml"

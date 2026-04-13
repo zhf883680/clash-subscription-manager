@@ -15,6 +15,8 @@ type Subscription struct {
 	CreatedAt      time.Time         `json:"created_at,omitempty"`
 	UpdatedAt      time.Time         `json:"updated_at"`
 	LastCheck      time.Time         `json:"last_check"`
+	LastError      string            `json:"last_error,omitempty"`
+	LastErrorTime  time.Time         `json:"last_error_time,omitempty"`
 	Status         string            `json:"status"`
 	NodeCount      int               `json:"node_count"`
 	Traffic        Traffic           `json:"traffic"`

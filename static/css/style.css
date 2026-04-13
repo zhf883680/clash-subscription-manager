@@ -214,6 +214,15 @@ a {
   font-size: 1.6rem;
 }
 
+.subscription-status {
+  color: var(--text);
+}
+
+.subscription-status-error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .metric-detail {
   color: var(--text-muted);
   font-size: 0.95rem;

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"clash-subscription-manager/handlers"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -60,7 +62,7 @@ func TestLoadConfigReadsYAMLFile(t *testing.T) {
 
 func TestNewRouterServesHealthEndpoint(t *testing.T) {
 	cfg := defaultConfig()
-	router := newRouter(newHandlerConfig(cfg))
+	router := newRouter(handlers.NewHandler(newHandlerConfig(cfg)))
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -75,7 +77,7 @@ func TestNewRouterServesHealthEndpoint(t *testing.T) {
 func TestNewRouterAllowsSubscriptionsAPIWithoutAuthentication(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.DataDir = t.TempDir()
-	router := newRouter(newHandlerConfig(cfg))
+	router := newRouter(handlers.NewHandler(newHandlerConfig(cfg)))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/subscriptions", nil)
 	rec := httptest.NewRecorder()

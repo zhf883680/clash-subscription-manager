@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"clash-subscription-manager/handlers"
@@ -14,7 +17,7 @@ import (
 )
 
 // Version is the application version, set via ldflags during build
-var Version = "v1.0.9"
+var Version = "v1.0.10"
 
 type Config struct {
 	Port              int           `yaml:"port"`
@@ -37,9 +40,26 @@ func main() {
 		logger.Fatalf("failed to load config: %v", err)
 	}
 
-	server := newServer(cfg)
+	handler := handlers.NewHandler(newHandlerConfig(cfg))
+	refresher := handlers.NewAutoRefresher(handler)
+	server := newServer(cfg, newRouter(handler))
+	shutdownSignals := signalContext()
 
 	logStartup(cfg)
+	refresher.Start()
+	defer refresher.Stop()
+
+	go func() {
+		<-shutdownSignals.Done()
+		refresher.Stop()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil && err != http.ErrServerClosed {
+			logger.Errorf("failed to shut down server: %v", err)
+		}
+	}()
+
 	if cfg.HTTPS {
 		logger.Info("HTTPS enabled")
 		if err := server.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
@@ -94,18 +114,17 @@ func loadConfig(path string) (Config, error) {
 	return cfg, nil
 }
 
-func newServer(cfg Config) *http.Server {
+func newServer(cfg Config, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      newRouter(newHandlerConfig(cfg)),
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 }
 
-func newRouter(cfg *handlers.Config) http.Handler {
-	h := handlers.NewHandler(cfg)
+func newRouter(h *handlers.Handler) http.Handler {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/", h.HomeHandler).Methods(http.MethodGet)
@@ -139,4 +158,9 @@ func newHandlerConfig(cfg Config) *handlers.Config {
 		DownloadTimeout: cfg.DownloadTimeout,
 		RateLimit:       cfg.RateLimit,
 	}
+}
+
+func signalContext() context.Context {
+	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	return ctx
 }

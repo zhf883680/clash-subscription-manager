@@ -171,6 +171,23 @@ function formatSubscriptionType(type) {
   };
 }
 
+function formatSubscriptionStatus(sub) {
+  const lastRefresh = sub.last_check || sub.last_error_time;
+  const relative = relativeTime(lastRefresh);
+
+  if (sub.last_error) {
+    return {
+      label: `最后更新: ${relative} (失败: ${sub.last_error})`,
+      className: "subscription-status subscription-status-error",
+    };
+  }
+
+  return {
+    label: lastRefresh ? `最后更新: ${relative}` : "等待首次刷新",
+    className: "subscription-status",
+  };
+}
+
 // ── Subscription List ─────────────────────────────────────────────────────────
 
 function renderSubscriptionList() {
@@ -192,6 +209,7 @@ function renderSubscriptionList() {
   listEl.innerHTML = subscriptions
     .map((sub) => {
       const typeMeta = formatSubscriptionType(sub.type);
+      const statusMeta = formatSubscriptionStatus(sub);
       return `
     <article class="subscription-card" data-id="${sub.id}">
       <div class="subscription-head">
@@ -207,10 +225,13 @@ function renderSubscriptionList() {
         ${sub.file_size ? `<div class="subscription-meta-item"><strong>大小</strong><span>${formatBytes(sub.file_size)}</span></div>` : ""}
         ${sub.node_count ? `<div class="subscription-meta-item"><strong>节点</strong><span>${sub.node_count}</span></div>` : ""}
         <div class="subscription-meta-item">
+          <strong>刷新状态</strong>
+          <span class="${escapeHtml(statusMeta.className)}">${escapeHtml(statusMeta.label)}</span>
+        </div>
+        <div class="subscription-meta-item">
           <strong>状态</strong>
           <span>${sub.status || "active"}</span>
         </div>
-        ${sub.last_check ? `<div class="subscription-meta-item"><strong>检查</strong><span>${relativeTime(sub.last_check)}</span></div>` : ""}
         ${Object.keys(sub.request_headers || {}).length > 0 ? `<div class="subscription-meta-item"><strong>请求头</strong><span>${Object.keys(sub.request_headers).length} 条</span></div>` : ""}
       </div>
       <div class="subscription-actions">
@@ -554,6 +575,66 @@ function renderTemplateSubscriptionOptions(template) {
 
 // ── Template Form ────────────────────────────────────────────────────────────
 
+const NEW_TEMPLATE_DEFAULT_CONTENT = `proxy-providers: {}
+proxy-groups:
+  - { name: 🚩 PROXY, type: select, proxies: [♻️ 自动选择, 🚀 手动切换] }
+  - { name: 🤖 人工智能, type: fallback, proxies: [✨ AISelect] }
+
+  #  代理
+  - { name: 🚀 手动切换, type: select, include-all: true }
+  - { name: ♻️ 自动选择, type: fallback, interval: 300, proxies: [🇸🇬 Singapore, 🇯🇵 Japan, 🇺🇸 USA, 🚀 手动切换] }
+  # 基础节点
+  - { name: ✨ AISelect, type: select, interval: 300, proxies: [🇺🇸 USA, 🇸🇬 Singapore, 🇯🇵 Japan] }
+
+  - { name: 🇺🇸 USA, type: fallback, include-all: true, exclude-type: direct, filter: "美国|United States" }
+  - { name: 🇯🇵 Japan, type: fallback, include-all: true, exclude-type: direct, filter: "日本|Japan" }
+  - { name: 🇸🇬 Singapore, type: fallback, include-all: true, exclude-type: direct, filter: "新加坡|Singapore" }
+  - { name: 🇭🇰 HongKong, type: fallback, include-all: true, exclude-type: direct, filter: "香港|Hong Kong" }
+
+rule-providers:
+  AWAvenue-Ads:
+    type: http
+    behavior: domain
+    format: yaml
+    # path可为空(仅限clash.meta 1.15.0以上版本)
+    path: ./ruleset/AWAvenue-Ads.yaml
+    url: "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-Clash.yaml"
+    interval: 600
+
+rules:
+  - SRC-PORT,7890,🚩 PROXY
+  - DST-PORT,22,DIRECT
+  - DOMAIN-SUFFIX,apifox.it.com,REJECT
+  - AND,(AND,(DST-PORT,443),(NETWORK,UDP)),(NOT,((GEOSITE,cn))),REJECT
+  - AND,(AND,(DST-PORT,443),(NETWORK,UDP)),(NOT,((GEOIP,CN))),REJECT
+  - RULE-SET,AWAvenue-Ads,REJECT
+  - GEOIP,lan,DIRECT,no-resolve
+
+  - GEOSITE,category-ads-all,REJECT
+  - GEOSITE,private,DIRECT
+  - GEOSITE,icloud,DIRECT
+  - GEOSITE,apple,DIRECT
+  - GEOSITE,anthropic,🤖 人工智能
+
+  - GEOSITE,category-ai-chat-!cn,🤖 人工智能
+
+  - GEOSITE,youtube,🚩 PROXY
+  - GEOSITE,google,🤖 人工智能
+  - GEOSITE,github,🚩 PROXY
+  - GEOSITE,onedrive,DIRECT
+  - GEOSITE,microsoft,DIRECT
+
+  - GEOSITE,CN,DIRECT
+  - GEOSITE,steam@cn,DIRECT
+  - GEOSITE,category-games@cn,DIRECT
+  - GEOSITE,geolocation-!cn,🚩 PROXY
+  - GEOSITE,telegram,🇭🇰 HongKong
+  - GEOIP,google,🚩 PROXY
+  - GEOIP,telegram,🇭🇰 HongKong
+  - GEOIP,CN,DIRECT
+  - MATCH,🚩 PROXY
+`;
+
 function initTemplateForm() {
   const form = document.getElementById("template-form");
   if (!form) return;
@@ -647,7 +728,13 @@ function initTemplateForm() {
 function newTemplate() {
   currentTemplateId = null;
   const form = document.getElementById("template-form");
-  if (form) form.reset();
+  if (form) {
+    form.reset();
+    const idInput = form.querySelector('[name="id"]');
+    if (idInput) idInput.value = "";
+    const contentInput = form.querySelector('[name="content"]');
+    if (contentInput) contentInput.value = NEW_TEMPLATE_DEFAULT_CONTENT;
+  }
   document.getElementById("template-editor-status").textContent = "新建模式";
   document.getElementById("template-current-name").textContent = "未命名模板";
   document.getElementById("template-current-subscription-count").textContent = "将使用全部订阅";
@@ -701,6 +788,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   await loadSubscriptions();
   await loadTemplates();
+  newTemplate();
   updateDashboardMetrics();
   renderTemplateList();
 });
