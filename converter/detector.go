@@ -27,6 +27,8 @@ func DetectSubscriptionType(content []byte) SubscriptionType {
 		switch {
 		case strings.HasPrefix(line, "ss://"):
 			counts[TypeSS]++
+		case strings.HasPrefix(line, "ssr://"):
+			counts[TypeSSR]++
 		case strings.HasPrefix(line, "vmess://"):
 			counts[TypeVMess]++
 		case strings.HasPrefix(line, "trojan://"):

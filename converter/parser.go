@@ -47,14 +47,75 @@ func ParseSSLink(link string) (*ProxyNode, error) {
 		name = net.JoinHostPort(server, portValue)
 	}
 
+	pluginName, pluginMode, pluginHost, pluginPath, pluginTLS, pluginMux := parseSSPluginOptions(parsed.Query().Get("plugin"))
+
 	return &ProxyNode{
-		Name:     name,
-		Type:     string(TypeSS),
-		Server:   server,
-		Port:     port,
-		Cipher:   parts[0],
-		Password: parts[1],
-		UDP:      true,
+		Name:       name,
+		Type:       string(TypeSS),
+		Server:     server,
+		Port:       port,
+		Cipher:     parts[0],
+		Password:   parts[1],
+		Plugin:     pluginName,
+		PluginMode: pluginMode,
+		PluginHost: pluginHost,
+		PluginPath: pluginPath,
+		PluginTLS:  pluginTLS,
+		PluginMux:  pluginMux,
+		UDP:        true,
+	}, nil
+}
+
+func ParseSSRLink(link string) (*ProxyNode, error) {
+	raw := strings.TrimPrefix(strings.TrimSpace(link), "ssr://")
+	decoded, ok := decodeBase64String(raw)
+	if !ok {
+		return nil, fmt.Errorf("invalid ssr payload")
+	}
+
+	mainPart := decoded
+	queryPart := ""
+	if idx := strings.Index(decoded, "/?"); idx >= 0 {
+		mainPart = decoded[:idx]
+		queryPart = decoded[idx+2:]
+	}
+
+	parts := strings.Split(mainPart, ":")
+	if len(parts) != 6 {
+		return nil, fmt.Errorf("invalid ssr payload")
+	}
+
+	port, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("invalid ssr port: %w", err)
+	}
+	password, ok := decodeBase64String(parts[5])
+	if !ok {
+		return nil, fmt.Errorf("invalid ssr password")
+	}
+
+	queryValues, err := url.ParseQuery(queryPart)
+	if err != nil {
+		return nil, fmt.Errorf("parse ssr query: %w", err)
+	}
+
+	name := decodeSSRQueryValue(queryValues.Get("remarks"))
+	if name == "" {
+		name = net.JoinHostPort(parts[0], parts[1])
+	}
+
+	return &ProxyNode{
+		Name:          name,
+		Type:          "ssr",
+		Server:        parts[0],
+		Port:          port,
+		Cipher:        parts[3],
+		Password:      password,
+		Protocol:      parts[2],
+		ProtocolParam: decodeSSRQueryValue(queryValues.Get("protoparam")),
+		Obfs:          parts[4],
+		ObfsParam:     decodeSSRQueryValue(queryValues.Get("obfsparam")),
+		UDP:           true,
 	}, nil
 }
 
@@ -75,6 +136,8 @@ func ParseVMessLink(link string) (*ProxyNode, error) {
 		Host string `json:"host"`
 		Path string `json:"path"`
 		TLS  string `json:"tls"`
+		SNI  string `json:"sni"`
+		SCY  string `json:"scy"`
 	}
 	if err := json.Unmarshal([]byte(decoded), &payload); err != nil {
 		return nil, fmt.Errorf("parse vmess payload: %w", err)
@@ -98,11 +161,18 @@ func ParseVMessLink(link string) (*ProxyNode, error) {
 		Port:       port,
 		UUID:       payload.ID,
 		AlterID:    alterID,
+		Cipher:     firstNonEmpty(payload.SCY, "auto"),
 		Network:    network,
 		TLS:        strings.EqualFold(payload.TLS, "tls"),
-		ServerName: payload.Host,
+		ServerName: firstNonEmpty(payload.SNI, payload.Host),
 		Host:       payload.Host,
 		Path:       payload.Path,
+		ServiceName: func() string {
+			if network == "grpc" {
+				return payload.Path
+			}
+			return ""
+		}(),
 		UDP:        true,
 	}, nil
 }
@@ -134,6 +204,12 @@ func ParseTrojanLink(link string) (*ProxyNode, error) {
 		ServerName: firstNonEmpty(query.Get("sni"), query.Get("peer"), query.Get("host")),
 		Host:       query.Get("host"),
 		Path:       query.Get("path"),
+		ServiceName: firstNonEmpty(
+			query.Get("serviceName"),
+			query.Get("grpc-service-name"),
+		),
+		SkipCertVerify: parseOptionalBoolDefault(firstNonEmpty(query.Get("allowInsecure"), query.Get("insecure")), nil),
+		TFO:            parseOptionalBoolDefault(firstNonEmpty(query.Get("tfo"), query.Get("fast-open")), nil),
 		UDP:        true,
 	}, nil
 }
@@ -155,6 +231,16 @@ func ParseVLESSLink(link string) (*ProxyNode, error) {
 	}
 
 	security := strings.ToLower(query.Get("security"))
+	skipCertVerify := true
+	tfo := false
+
+	if value, ok := parseOptionalBool(firstNonEmpty(query.Get("allowInsecure"), query.Get("insecure"))); ok {
+		skipCertVerify = value
+	}
+	if value, ok := parseOptionalBool(firstNonEmpty(query.Get("tfo"), query.Get("fast-open"))); ok {
+		tfo = value
+	}
+
 	return &ProxyNode{
 		Name:              name,
 		Type:              string(TypeVLESS),
@@ -170,6 +256,9 @@ func ParseVLESSLink(link string) (*ProxyNode, error) {
 		PublicKey:         query.Get("pbk"),
 		ShortID:           query.Get("sid"),
 		ServiceName:       query.Get("serviceName"),
+		Flow:              query.Get("flow"),
+		SkipCertVerify:    &skipCertVerify,
+		TFO:               &tfo,
 		UDP:               true,
 	}, nil
 }
@@ -178,6 +267,8 @@ func parseLine(line string) (*ProxyNode, error) {
 	switch {
 	case strings.HasPrefix(line, "ss://"):
 		return ParseSSLink(line)
+	case strings.HasPrefix(line, "ssr://"):
+		return ParseSSRLink(line)
 	case strings.HasPrefix(line, "vmess://"):
 		return ParseVMessLink(line)
 	case strings.HasPrefix(line, "trojan://"):
@@ -249,4 +340,73 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func parseOptionalBool(value string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true, true
+	case "0", "false", "no", "off":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func parseOptionalBoolDefault(value string, fallback *bool) *bool {
+	if parsed, ok := parseOptionalBool(value); ok {
+		return &parsed
+	}
+	return fallback
+}
+
+func parseSSPluginOptions(value string) (string, string, string, string, *bool, *bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", "", "", "", nil, nil
+	}
+
+	parts := strings.Split(value, ";")
+	name := strings.TrimSpace(parts[0])
+	options := map[string]string{}
+	for _, part := range parts[1:] {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		key, val, ok := strings.Cut(part, "=")
+		if ok {
+			options[strings.TrimSpace(key)] = strings.TrimSpace(val)
+			continue
+		}
+		options[part] = "true"
+	}
+
+	var pluginTLS *bool
+	var pluginMux *bool
+	if parsed, ok := parseOptionalBool(options["tls"]); ok {
+		pluginTLS = &parsed
+	} else if _, ok := options["tls"]; ok {
+		value := true
+		pluginTLS = &value
+	}
+	if parsed, ok := parseOptionalBool(options["mux"]); ok {
+		pluginMux = &parsed
+	} else if _, ok := options["mux"]; ok {
+		value := true
+		pluginMux = &value
+	}
+
+	return name, options["mode"], options["host"], options["path"], pluginTLS, pluginMux
+}
+
+func decodeSSRQueryValue(value string) string {
+	if value == "" {
+		return ""
+	}
+	decoded, ok := decodeBase64String(value)
+	if !ok {
+		return value
+	}
+	return strings.TrimSpace(decoded)
 }

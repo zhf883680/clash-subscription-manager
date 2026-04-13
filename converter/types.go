@@ -10,6 +10,7 @@ const (
 	TypeUnknown SubscriptionType = "unknown"
 	TypeClash   SubscriptionType = "clash"
 	TypeSS      SubscriptionType = "ss"
+	TypeSSR     SubscriptionType = "ssr"
 	TypeVMess   SubscriptionType = "vmess"
 	TypeTrojan  SubscriptionType = "trojan"
 	TypeVLESS   SubscriptionType = "vless"
@@ -31,10 +32,23 @@ type ProxyNode struct {
 	Host              string
 	Path              string
 	UDP               bool
+	Protocol          string
+	ProtocolParam     string
+	Obfs              string
+	ObfsParam         string
+	Plugin            string
+	PluginMode        string
+	PluginHost        string
+	PluginPath        string
+	PluginTLS         *bool
+	PluginMux         *bool
 	ClientFingerprint string
 	PublicKey         string
 	ShortID           string
 	ServiceName       string
+	Flow              string
+	SkipCertVerify    *bool
+	TFO               *bool
 }
 
 type ConversionSummary struct {

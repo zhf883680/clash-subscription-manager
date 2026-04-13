@@ -15,7 +15,7 @@ A small web app for managing Clash subscription links and cached config files, w
 ## Features
 
 - Add subscription URLs and automatically convert supported formats to Clash YAML
-- Support direct Clash subscriptions plus automatic conversion for SS, VMess, Trojan, and VLESS links
+- Support direct Clash subscriptions plus automatic conversion for SS, SSR, VMess, Trojan, and VLESS links
 - Save converted configs locally
 - Edit subscription URL, provider filter, and headers without refreshing the cached file
 - Refresh a subscription on demand when you want to update the cached file
@@ -37,7 +37,7 @@ The app reads configuration from `config.yaml` and listens on port `8080` by def
 On startup it logs the current version, for example:
 
 ```text
-starting clash-subscription-manager v1.0.11 on port 8080
+starting clash-subscription-manager v1.0.12 on port 8080
 ```
 
 ## Templates
