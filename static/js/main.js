@@ -132,6 +132,34 @@ function initAdvancedToggle() {
   });
 }
 
+function getSubscriptionSourceMode() {
+  return document.querySelector('input[name="subscription_source"]:checked')?.value || "url";
+}
+
+function syncSubscriptionSourceMode() {
+  const mode = getSubscriptionSourceMode();
+  const urlField = document.getElementById("subscription-url-field");
+  const urlInput = document.querySelector('#subscribe-form input[name="url"]');
+  const nodesField = document.getElementById("subscription-nodes-field");
+  const nodesInput = document.querySelector('#subscribe-form textarea[name="node_links_text"]');
+  const headersField = document.getElementById("request-headers-field");
+
+  const usingNodes = mode === "nodes";
+
+  if (urlField) urlField.classList.toggle("hidden", usingNodes);
+  if (nodesField) nodesField.classList.toggle("hidden", !usingNodes);
+  if (headersField) headersField.classList.toggle("hidden", usingNodes);
+  if (urlInput) urlInput.required = !usingNodes;
+  if (nodesInput) nodesInput.required = usingNodes;
+}
+
+function initSubscriptionSourceToggle() {
+  document.querySelectorAll('input[name="subscription_source"]').forEach((input) => {
+    input.addEventListener("change", syncSubscriptionSourceMode);
+  });
+  syncSubscriptionSourceMode();
+}
+
 // ── Request Headers Helpers ─────────────────────────────────────────────────
 
 function parseHeadersText(text) {
@@ -299,19 +327,29 @@ function initSubscriptionForm() {
 
     try {
       const fd = new FormData(form);
+      const sourceMode = fd.get("subscription_source") || "url";
       const headersText = fd.get("request_headers_text") || "";
       const payload = {
         name: fd.get("name"),
-        url: fd.get("url"),
         filter: fd.get("filter") || "",
-        request_headers: parseHeadersText(headersText),
       };
 
-      const res = await api("/subscribe", { method: "POST", body: JSON.stringify(payload) });
+      let endpoint = "/subscribe";
+      if (sourceMode === "nodes") {
+        payload.node_links_text = fd.get("node_links_text") || "";
+        endpoint = "/subscribe/nodes";
+      } else {
+        payload.url = fd.get("url");
+        payload.request_headers = parseHeadersText(headersText);
+      }
+
+      const res = await api(endpoint, { method: "POST", body: JSON.stringify(payload) });
       if (res.success) {
         showToast("订阅添加成功");
         form.reset();
         document.getElementById("subscription-advanced").hidden = true;
+        document.querySelector('input[name="subscription_source"][value="url"]').checked = true;
+        syncSubscriptionSourceMode();
         await loadSubscriptions();
         updateDashboardMetrics();
       } else {
@@ -793,6 +831,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
   initQuickActions();
   initAdvancedToggle();
+  initSubscriptionSourceToggle();
   initSubscriptionForm();
   initTemplateForm();
   initReloadButton();

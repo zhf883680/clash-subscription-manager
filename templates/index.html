@@ -38,103 +38,29 @@
             <div class="workspace-tabs" role="tablist" aria-label="管理工作区">
                 <button
                     type="button"
-                    id="subscriptions-panel-tab"
+                    id="templates-panel-tab"
                     class="workspace-tab is-active"
                     role="tab"
                     aria-selected="true"
-                    aria-controls="subscriptions-panel"
-                    data-tab-target="subscriptions-panel"
-                >
-                    订阅管理
-                </button>
-                <button
-                    type="button"
-                    id="templates-panel-tab"
-                    class="workspace-tab"
-                    role="tab"
-                    aria-selected="false"
                     aria-controls="templates-panel"
                     data-tab-target="templates-panel"
                 >
                     模板管理
                 </button>
+                <button
+                    type="button"
+                    id="subscriptions-panel-tab"
+                    class="workspace-tab"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="subscriptions-panel"
+                    data-tab-target="subscriptions-panel"
+                >
+                    订阅管理
+                </button>
             </div>
 
-            <section id="subscriptions-panel" class="workspace-panel is-active" role="tabpanel" aria-labelledby="subscriptions-panel-tab">
-                <div class="subscription-grid">
-                    <section class="surface surface-accent">
-                        <div class="surface-heading">
-                            <h2>新增订阅</h2>
-                        </div>
-
-                        <form id="subscribe-form" class="form-stack">
-                            <label class="field">
-                                <span>订阅名称</span>
-                                <input type="text" name="name" maxlength="100" placeholder="例如：日本节点合集" required>
-                            </label>
-
-                            <label class="field">
-                                <span>订阅地址</span>
-                                <input type="url" name="url" placeholder="https://example.com/clash.yaml" required>
-                                <p class="field-note">协议类型会在下载后自动识别并转换，无需手动选择。</p>
-                            </label>
-
-                            <div class="advanced-toggle-row">
-                                <button
-                                    type="button"
-                                    class="btn btn-ghost btn-compact"
-                                    data-toggle-advanced="subscription-advanced"
-                                    aria-expanded="false"
-                                >
-                                    高级设置
-                                </button>
-                            </div>
-
-                            <div id="subscription-advanced" class="advanced-panel" hidden>
-                                <label class="field">
-                                    <span>节点筛选 Filter</span>
-                                    <input type="text" name="filter" placeholder='例如：(?i)港|hk|hongkong|hong kong'>
-                                </label>
-
-                                <label class="field">
-                                    <span>自定义请求头</span>
-                                    <textarea name="request_headers_text" id="request-headers-input" rows="6" placeholder="每行一个 Key: Value"></textarea>
-                                </label>
-                            </div>
-
-                            <div class="form-submit-row">
-                                <button type="submit" id="submit-btn" class="btn btn-primary btn-block">添加订阅</button>
-                            </div>
-                        </form>
-                    </section>
-
-                    <section class="surface">
-                        <div class="surface-heading">
-                            <h2>订阅列表</h2>
-                            <button type="button" id="reload-subscriptions-btn" class="btn btn-secondary btn-compact">刷新列表</button>
-                        </div>
-
-                        <div class="list-summary">
-                            <article class="summary-pill">
-                                <span class="summary-label">最近同步</span>
-                                <strong id="subscription-last-updated">等待数据载入</strong>
-                            </article>
-                            <article class="summary-pill">
-                                <span class="summary-label">请求头配置</span>
-                                <strong id="subscription-header-usage">0 条订阅已配置</strong>
-                            </article>
-                        </div>
-
-                        <div id="loading" class="loading">正在加载订阅列表...</div>
-                        <div id="subscriptions" class="subscription-list"></div>
-                        <div id="empty-state" class="empty-state" hidden>
-                            <p>还没有订阅，先从左侧添加一个常用链接。</p>
-                        </div>
-                    </section>
-                </div>
-            </section>
-
-            <section id="templates-panel" class="workspace-panel" role="tabpanel" hidden>
+            <section id="templates-panel" class="workspace-panel is-active" role="tabpanel" aria-labelledby="templates-panel-tab">
                 <div class="template-grid">
                     <aside class="surface template-sidebar">
                         <div class="surface-heading">
@@ -210,6 +136,103 @@
                                 <textarea name="content" id="template-content-input" rows="20" placeholder="输入基础 YAML 配置" required></textarea>
                             </label>
                         </form>
+                    </section>
+                </div>
+            </section>
+
+            <section id="subscriptions-panel" class="workspace-panel" role="tabpanel" hidden>
+                <div class="subscription-grid">
+                    <section class="surface surface-accent">
+                        <div class="surface-heading">
+                            <h2>新增订阅</h2>
+                        </div>
+
+                        <form id="subscribe-form" class="form-stack">
+                            <label class="field">
+                                <span>订阅名称</span>
+                                <input type="text" name="name" maxlength="100" placeholder="例如：日本节点合集" required>
+                            </label>
+
+                            <fieldset class="field subscription-source-field">
+                                <div>
+                                    <span>订阅来源</span>
+                                    <p class="field-note">选择从订阅地址下载，或直接把多个原始节点合并成一条订阅。</p>
+                                </div>
+                                <div class="source-mode-options">
+                                    <label class="source-mode-option">
+                                        <input type="radio" name="subscription_source" value="url" checked>
+                                        <span>订阅地址</span>
+                                    </label>
+                                    <label class="source-mode-option">
+                                        <input type="radio" name="subscription_source" value="nodes">
+                                        <span>节点文本</span>
+                                    </label>
+                                </div>
+                            </fieldset>
+
+                            <label class="field" id="subscription-url-field">
+                                <span>订阅地址</span>
+                                <input type="url" name="url" placeholder="https://example.com/clash.yaml" required>
+                                <p class="field-note">协议类型会在下载后自动识别并转换，无需手动选择。</p>
+                            </label>
+
+                            <label class="field hidden" id="subscription-nodes-field">
+                                <span>节点文本</span>
+                                <textarea name="node_links_text" rows="10" placeholder="每行一个节点链接，例如：&#10;ss://...&#10;vmess://...&#10;trojan://..."></textarea>
+                                <p class="field-note">支持直接粘贴一个或多个节点链接，系统会自动忽略空行和无效行，并一次生成一个订阅。</p>
+                            </label>
+
+                            <div class="advanced-toggle-row">
+                                <button
+                                    type="button"
+                                    class="btn btn-ghost btn-compact"
+                                    data-toggle-advanced="subscription-advanced"
+                                    aria-expanded="false"
+                                >
+                                    高级设置
+                                </button>
+                            </div>
+
+                            <div id="subscription-advanced" class="advanced-panel" hidden>
+                                <label class="field">
+                                    <span>节点筛选 Filter</span>
+                                    <input type="text" name="filter" placeholder='例如：(?i)港|hk|hongkong|hong kong'>
+                                </label>
+
+                                <label class="field" id="request-headers-field">
+                                    <span>自定义请求头</span>
+                                    <textarea name="request_headers_text" id="request-headers-input" rows="6" placeholder="每行一个 Key: Value"></textarea>
+                                </label>
+                            </div>
+
+                            <div class="form-submit-row">
+                                <button type="submit" id="submit-btn" class="btn btn-primary btn-block">添加订阅</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <section class="surface">
+                        <div class="surface-heading">
+                            <h2>订阅列表</h2>
+                            <button type="button" id="reload-subscriptions-btn" class="btn btn-secondary btn-compact">刷新列表</button>
+                        </div>
+
+                        <div class="list-summary">
+                            <article class="summary-pill">
+                                <span class="summary-label">最近同步</span>
+                                <strong id="subscription-last-updated">等待数据载入</strong>
+                            </article>
+                            <article class="summary-pill">
+                                <span class="summary-label">请求头配置</span>
+                                <strong id="subscription-header-usage">0 条订阅已配置</strong>
+                            </article>
+                        </div>
+
+                        <div id="loading" class="loading">正在加载订阅列表...</div>
+                        <div id="subscriptions" class="subscription-list"></div>
+                        <div id="empty-state" class="empty-state" hidden>
+                            <p>还没有订阅，先从右侧新增一个常用链接或节点集合。</p>
+                        </div>
                     </section>
                 </div>
             </section>

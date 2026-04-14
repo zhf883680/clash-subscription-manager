@@ -89,6 +89,33 @@ func TestConvertToClashDecodesBase64WrappedProtocolLines(t *testing.T) {
 	}
 }
 
+func TestConvertNodesTextToClashIgnoresBlankAndInvalidLines(t *testing.T) {
+	input := strings.Join([]string{
+		"",
+		"  ss://YWVzLTI1Ni1nY206cGFzcw==@ss.example.com:443#ss-demo  ",
+		"not-a-node",
+		"trojan://secret@trojan.example.com:443#trojan-demo",
+		"",
+	}, "\n")
+
+	got, summary, err := ConvertNodesTextToClash(input)
+	if err != nil {
+		t.Fatalf("ConvertNodesTextToClash() error = %v", err)
+	}
+	if summary.DetectedType != "mixed" {
+		t.Fatalf("DetectedType = %q, want %q", summary.DetectedType, "mixed")
+	}
+	if summary.NodeCount != 2 {
+		t.Fatalf("NodeCount = %d, want 2", summary.NodeCount)
+	}
+	if !bytes.Contains(got, []byte("type: ss")) {
+		t.Fatalf("converted content missing ss proxy:\n%s", string(got))
+	}
+	if !bytes.Contains(got, []byte("type: trojan")) {
+		t.Fatalf("converted content missing trojan proxy:\n%s", string(got))
+	}
+}
+
 func TestConvertToClashConvertsSSSubscription(t *testing.T) {
 	got, summary, err := ConvertToClash([]byte("ss://YWVzLTI1Ni1nY206cGFzcw==@example.com:443#demo"))
 	if err != nil {

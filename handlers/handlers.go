@@ -47,6 +47,7 @@ type subscriptionPayload struct {
 	URL            string            `json:"url"`
 	Filter         string            `json:"filter"`
 	Type           string            `json:"type"`
+	NodeLinksText  string            `json:"node_links_text"`
 	RequestHeaders map[string]string `json:"request_headers"`
 }
 
@@ -236,6 +237,78 @@ func (h *Handler) SubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	sub.NodeCount = summary.NodeCount
 
 	// Add subscription
+	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
+	addedSub, err := AddSubscription(sub, dataFile)
+	if err != nil {
+		_ = os.Remove(filepath.Join(h.config.DataDir, filePath))
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to add subscription: %v", err),
+		})
+		return
+	}
+
+	h.respondJSON(w, http.StatusCreated, Response{
+		Success: true,
+		Message: "Subscription added successfully",
+		Data:    addedSub,
+	})
+}
+
+func (h *Handler) SubscribeNodesHandler(w http.ResponseWriter, r *http.Request) {
+	payload, err := decodeSubscriptionPayload(r)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if payload.Name == "" || strings.TrimSpace(payload.NodeLinksText) == "" {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   "Name and node links are required",
+		})
+		return
+	}
+
+	convertedContent, summary, err := converter.ConvertNodesTextToClash(payload.NodeLinksText)
+	if err != nil {
+		h.respondJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Unsupported node links: %v", err),
+		})
+		return
+	}
+
+	sub := models.Subscription{
+		Name:           payload.Name,
+		URL:            "nodes://manual",
+		Filter:         payload.Filter,
+		Type:           summary.DetectedType,
+		RequestHeaders: map[string]string{},
+	}
+
+	now := time.Now()
+	sub.CreatedAt = now
+	sub.UpdatedAt = now
+	sub.LastCheck = now
+	sub.Status = "active"
+
+	filePath, err := h.storeSubscriptionFile(sub.Name, convertedContent)
+	if err != nil {
+		h.respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to store subscription file: %v", err),
+		})
+		return
+	}
+
+	sub.FilePath = filePath
+	sub.FileSize = int64(len(convertedContent))
+	sub.NodeCount = summary.NodeCount
+
 	dataFile := filepath.Join(h.config.DataDir, "subscriptions.json")
 	addedSub, err := AddSubscription(sub, dataFile)
 	if err != nil {

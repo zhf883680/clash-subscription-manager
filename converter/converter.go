@@ -3,6 +3,7 @@ package converter
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -50,6 +51,49 @@ func ConvertToClash(content []byte) ([]byte, ConversionSummary, error) {
 	}
 	return out, ConversionSummary{
 		DetectedType: string(detected),
+		OutputType:   string(TypeClash),
+		NodeCount:    len(nodes),
+	}, nil
+}
+
+func ConvertNodesTextToClash(input string) ([]byte, ConversionSummary, error) {
+	lines := strings.Split(input, "\n")
+	nodes := make([]*ProxyNode, 0, len(lines))
+	types := make(map[string]struct{})
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		node, err := parseLine(trimmed)
+		if err != nil {
+			continue
+		}
+
+		nodes = append(nodes, node)
+		types[node.Type] = struct{}{}
+	}
+
+	if len(nodes) == 0 {
+		return nil, ConversionSummary{}, fmt.Errorf("%w: no valid proxy nodes found", ErrUnsupportedSubscription)
+	}
+
+	out, err := BuildClashConfig(nodes)
+	if err != nil {
+		return nil, ConversionSummary{}, err
+	}
+
+	detectedType := string(TypeMixed)
+	if len(types) == 1 {
+		for nodeType := range types {
+			detectedType = nodeType
+		}
+	}
+
+	return out, ConversionSummary{
+		DetectedType: detectedType,
 		OutputType:   string(TypeClash),
 		NodeCount:    len(nodes),
 	}, nil

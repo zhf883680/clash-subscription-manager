@@ -427,6 +427,31 @@ a {
   gap: 12px;
 }
 
+.source-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.source-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(120, 185, 255, 0.12);
+  background: rgba(8, 20, 36, 0.8);
+  color: var(--text-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.source-mode-option input {
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
 .inline-hint {
   color: var(--text-muted);
   font-size: 0.92rem;

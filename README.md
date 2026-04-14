@@ -1,6 +1,6 @@
 # Clash Subscription Manager
 
-A small web app for managing Clash subscription links and cached config files, with automatic subscription format detection and conversion.
+A small web app for managing Clash subscription links, raw node text, and cached config files, with automatic subscription format detection and conversion.
 
 **[简体中文版 README](README.zh-CN.md)** | English
 
@@ -14,7 +14,7 @@ A small web app for managing Clash subscription links and cached config files, w
 
 ## Features
 
-- Add subscription URLs and automatically convert supported formats to Clash YAML
+- Add subscriptions in two ways: download from a URL, or paste one or more raw node links and merge them into one subscription
 - Support direct Clash subscriptions plus automatic conversion for SS, SSR, VMess, Trojan, and VLESS links
 - Save converted configs locally
 - Edit subscription URL, provider filter, and headers without refreshing the cached file
@@ -37,11 +37,12 @@ The app reads configuration from `config.yaml` and listens on port `8080` by def
 On startup it logs the current version, for example:
 
 ```text
-starting clash-subscription-manager v1.0.12 on port 8080
+starting clash-subscription-manager v1.0.13 on port 8080
 ```
 
 ## Templates
 
+- The UI now opens on `Template Management` first. The template page uses an editor-left/list-right layout, while the subscription page uses a list-left/create-right layout.
 - Create, edit, and delete multiple templates in the web UI.
 - Subscription editing supports both `Save Changes Only` and `Save and Refresh`.
 - The saved YAML is the base config. When you download a template, the server replaces `proxy-providers` with entries generated from the subscriptions selected for that template.
@@ -49,6 +50,14 @@ starting clash-subscription-manager v1.0.12 on port 8080
 - If a subscription has a `filter` value, the renderer writes it into that provider entry. Empty `filter` values are omitted.
 - `Copy Expanded Proxy URL` outputs flattened `proxies` entries and is suitable for clients such as Shadowrocket and Loon.
 - Template render URL: `/api/templates/{id}/render`
+
+## Subscriptions
+
+- The create form supports both `Subscription URL` and `Node Text` sources.
+- In `Node Text` mode, you can paste multiple lines such as `ss://...`, `vmess://...`, `trojan://...`, `vless://...`, and `ssr://...`.
+- Multiple pasted nodes are converted and stored as one subscription record in a single submission.
+- Blank lines and invalid lines are ignored in node-text mode. If every line is invalid, the request fails.
+- `Custom Headers` only apply to URL-based subscriptions and are hidden for node-text mode.
 
 ## Docker
 

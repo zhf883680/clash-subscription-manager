@@ -106,6 +106,61 @@ func TestSubscribeHandlerDownloadsAndStoresSubscriptionFile(t *testing.T) {
 	}
 }
 
+func TestSubscribeNodesHandlerCreatesSubscriptionFromMultipleLinks(t *testing.T) {
+	dataDir := t.TempDir()
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+	})
+
+	body := bytes.NewBufferString("{\"name\":\"mixed nodes\",\"node_links_text\":\"ss://YWVzLTI1Ni1nY206cGFzcw==@ss.example.com:443#ss-demo\\ntrojan://secret@trojan.example.com:443#trojan-demo\",\"filter\":\"(?i)sg|jp\"}")
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe/nodes", body)
+	rec := httptest.NewRecorder()
+
+	handler.SubscribeNodesHandler(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	subs, err := ListSubscriptions(filepath.Join(dataDir, "subscriptions.json"))
+	if err != nil {
+		t.Fatalf("ListSubscriptions() error = %v", err)
+	}
+	if len(subs) != 1 {
+		t.Fatalf("len(subs) = %d, want 1", len(subs))
+	}
+	if got := subs[0].Name; got != "mixed nodes" {
+		t.Fatalf("name = %q, want %q", got, "mixed nodes")
+	}
+	if got := subs[0].URL; got != "nodes://manual" {
+		t.Fatalf("url = %q, want %q", got, "nodes://manual")
+	}
+	if got := subs[0].Type; got != "mixed" {
+		t.Fatalf("type = %q, want %q", got, "mixed")
+	}
+	if got := subs[0].NodeCount; got != 2 {
+		t.Fatalf("node count = %d, want 2", got)
+	}
+	if got := subs[0].Filter; got != "(?i)sg|jp" {
+		t.Fatalf("filter = %q, want %q", got, "(?i)sg|jp")
+	}
+	if len(subs[0].RequestHeaders) != 0 {
+		t.Fatalf("request headers = %#v, want empty", subs[0].RequestHeaders)
+	}
+	content, err := os.ReadFile(filepath.Join(dataDir, subs[0].FilePath))
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(content), "type: ss") {
+		t.Fatalf("stored content missing ss proxy:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "type: trojan") {
+		t.Fatalf("stored content missing trojan proxy:\n%s", string(content))
+	}
+}
+
 func TestRateLimitHandlesConcurrentRequestsSafely(t *testing.T) {
 	handler := NewHandler(&Config{
 		DataDir:         t.TempDir(),
@@ -261,6 +316,33 @@ func TestHomeHandlerRendersStaticAssetLinks(t *testing.T) {
 	}
 	if !strings.Contains(body, `id="dashboard-subscription-count"`) {
 		t.Fatalf("body missing dashboard metric anchor: %s", body)
+	}
+	if !strings.Contains(body, `id="templates-panel-tab"`) || !strings.Contains(body, `模板管理`) {
+		t.Fatalf("body missing templates tab: %s", body)
+	}
+	if !strings.Contains(body, `id="subscriptions-panel-tab"`) || !strings.Contains(body, `订阅管理`) {
+		t.Fatalf("body missing subscriptions tab: %s", body)
+	}
+	if strings.Index(body, `id="templates-panel-tab"`) > strings.Index(body, `id="subscriptions-panel-tab"`) {
+		t.Fatalf("templates tab should appear before subscriptions tab: %s", body)
+	}
+	if strings.Index(body, `class="surface template-sidebar"`) > strings.Index(body, `class="surface template-editor-surface"`) {
+		t.Fatalf("template page body layout should remain list-left editor-right: %s", body)
+	}
+	if strings.Index(body, `class="surface surface-accent"`) > strings.Index(body, `<section class="surface">`) {
+		t.Fatalf("subscription page body layout should remain create-left list-right: %s", body)
+	}
+	if !strings.Contains(body, `name="subscription_source"`) {
+		t.Fatalf("body missing subscription source mode toggle: %s", body)
+	}
+	if !strings.Contains(body, `value="url"`) || !strings.Contains(body, `value="nodes"`) {
+		t.Fatalf("body missing source mode options: %s", body)
+	}
+	if !strings.Contains(body, `name="node_links_text"`) {
+		t.Fatalf("body missing node links textarea: %s", body)
+	}
+	if !strings.Contains(body, `支持直接粘贴一个或多个节点链接`) {
+		t.Fatalf("body missing node-links helper copy: %s", body)
 	}
 }
 
