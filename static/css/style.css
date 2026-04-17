@@ -150,6 +150,26 @@ a {
   z-index: 1;
 }
 
+.hero-brand {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(100%, 492px);
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(120, 185, 255, 0.16);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(34, 197, 94, 0.05)),
+    rgba(6, 15, 27, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.hero-brand-mark {
+  display: block;
+  width: min(100%, 460px);
+  height: auto;
+}
+
 .hero-copy h1 {
   margin: 0;
   max-width: 12ch;
@@ -900,6 +920,15 @@ a {
   .list-summary,
   .editor-insights {
     grid-template-columns: 1fr;
+  }
+
+  .hero-brand {
+    max-width: 100%;
+    padding: 10px 12px;
+  }
+
+  .hero-brand-mark {
+    width: min(100%, 290px);
   }
 
   .workspace-tabs {

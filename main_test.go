@@ -92,6 +92,26 @@ func TestNewRouterAllowsSubscriptionsAPIWithoutAuthentication(t *testing.T) {
 	}
 }
 
+func TestNewRouterServesLogoAssets(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.DataDir = t.TempDir()
+	router := newRouter(handlers.NewHandler(newHandlerConfig(cfg)))
+
+	for _, path := range []string{"/static/img/logo-primary.svg", "/static/img/logo-icon.svg"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusOK)
+		}
+		if !strings.Contains(rec.Body.String(), "<svg") {
+			t.Fatalf("%s body missing svg markup: %s", path, rec.Body.String())
+		}
+	}
+}
+
 func TestLogStartupIncludesVersionAndPort(t *testing.T) {
 	var buffer bytes.Buffer
 	originalOut := logger.Out

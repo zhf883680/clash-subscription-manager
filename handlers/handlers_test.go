@@ -346,6 +346,65 @@ func TestHomeHandlerRendersStaticAssetLinks(t *testing.T) {
 	}
 }
 
+func TestHomeHandlerRendersHeroLogoBranding(t *testing.T) {
+	handler := NewHandler(&Config{
+		DataDir:         t.TempDir(),
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HomeHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `/static/img/logo-primary.svg`) {
+		t.Fatalf("body missing primary logo asset: %s", body)
+	}
+	if !strings.Contains(body, `class="hero-brand"`) {
+		t.Fatalf("body missing hero brand row: %s", body)
+	}
+	if !strings.Contains(body, `alt="Clash Subscription Manager logo"`) {
+		t.Fatalf("body missing primary logo alt text: %s", body)
+	}
+	if !strings.Contains(body, `Clash 订阅管理`) {
+		t.Fatalf("body missing existing Chinese page title: %s", body)
+	}
+	if strings.Index(body, `class="hero-brand"`) > strings.Index(body, `class="eyebrow"`) {
+		t.Fatalf("hero brand should render before eyebrow label: %s", body)
+	}
+}
+
+func TestHomeHandlerRendersFaviconLink(t *testing.T) {
+	handler := NewHandler(&Config{
+		DataDir:         t.TempDir(),
+		MaxFileSize:     1024,
+		DownloadTimeout: 0,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HomeHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `rel="icon"`) {
+		t.Fatalf("body missing favicon rel: %s", body)
+	}
+	if !strings.Contains(body, `/static/img/logo-icon.svg`) {
+		t.Fatalf("body missing favicon asset link: %s", body)
+	}
+}
+
 func TestRefreshSubscriptionUpdatesURLHeadersAndCachedFile(t *testing.T) {
 	dataDir := t.TempDir()
 	cachedName := "sub-1.yaml"

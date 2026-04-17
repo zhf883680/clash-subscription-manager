@@ -1,0 +1,23 @@
+<svg width="520" height="64" viewBox="0 0 520 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="logoTitle logoDesc">
+  <title id="logoTitle">Clash Subscription Manager</title>
+  <desc id="logoDesc">A hub-and-nodes logo for Clash Subscription Manager.</desc>
+  <defs>
+    <linearGradient id="logoFrame" x1="9" y1="8" x2="55" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <linearGradient id="logoLines" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DD3FC"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(4 4)">
+    <path d="M20 4H36L48 12V24L52 28V40L36 52H20L8 44V32L4 28V16L20 4Z" fill="#07111F" stroke="url(#logoFrame)" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M28 28L19 18M28 28L41 20M28 28L40 39" stroke="url(#logoLines)" stroke-width="2.75" stroke-linecap="round"/>
+    <circle cx="28" cy="28" r="5.5" fill="#22C55E" stroke="#EAF5FF" stroke-width="1.8"/>
+    <circle cx="18.5" cy="17.5" r="4.25" fill="#07111F" stroke="#38BDF8" stroke-width="2"/>
+    <circle cx="41.5" cy="20" r="4.25" fill="#07111F" stroke="#38BDF8" stroke-width="2"/>
+    <circle cx="40.5" cy="39.5" r="4.25" fill="#07111F" stroke="#38BDF8" stroke-width="2"/>
+  </g>
+  <text x="72" y="39" fill="#EFF6FF" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="0.01em">Clash Subscription Manager</text>
+</svg>
