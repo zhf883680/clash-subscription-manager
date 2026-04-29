@@ -29,6 +29,14 @@ func (h *Handler) refreshSubscription(id string, dataFile string, payload subscr
 		}
 	}
 
+	// Manual node subscriptions cannot be refreshed from a remote URL
+	if current.URL == "nodes://manual" {
+		return nil, &refreshFailure{
+			statusCode: http.StatusBadRequest,
+			err:        fmt.Errorf("手动添加的节点订阅不支持刷新，请删除后重新添加"),
+		}
+	}
+
 	name := payload.Name
 	if name == "" {
 		name = current.Name

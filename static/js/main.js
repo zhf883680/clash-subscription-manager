@@ -245,10 +245,16 @@ function renderSubscriptionList() {
         <span class="subscription-type subscription-type-${escapeHtml(typeMeta.tone)}">${escapeHtml(typeMeta.label)}</span>
       </div>
       <div class="subscription-meta">
-        <div class="subscription-meta-item">
-          <strong>地址</strong>
-          <span>${escapeHtml(sub.url)}</span>
-        </div>
+        ${sub.url === "nodes://manual"
+          ? `<div class="subscription-meta-item">
+               <strong>来源</strong>
+               <span>手动添加</span>
+             </div>`
+          : `<div class="subscription-meta-item">
+               <strong>地址</strong>
+               <span class="subscription-url-text" title="${escapeHtml(sub.url)}">${escapeHtml(sub.url)}</span>
+             </div>`
+        }
         ${sub.filter ? `<div class="subscription-meta-item"><strong>筛选</strong><span>${escapeHtml(sub.filter)}</span></div>` : ""}
         ${sub.file_size ? `<div class="subscription-meta-item"><strong>大小</strong><span>${formatBytes(sub.file_size)}</span></div>` : ""}
         ${sub.node_count ? `<div class="subscription-meta-item"><strong>节点</strong><span>${sub.node_count}</span></div>` : ""}
@@ -265,7 +271,7 @@ function renderSubscriptionList() {
       <div class="subscription-actions">
         <button type="button" class="btn btn-secondary btn-compact copy-download-btn" data-id="${sub.id}">复制下载地址</button>
         <button type="button" class="btn btn-secondary btn-compact edit-subscription-btn" data-id="${sub.id}">编辑</button>
-        <button type="button" class="btn btn-secondary btn-compact refresh-subscription-btn" data-id="${sub.id}">刷新</button>
+        ${sub.url !== "nodes://manual" ? `<button type="button" class="btn btn-secondary btn-compact refresh-subscription-btn" data-id="${sub.id}">刷新</button>` : ""}
         <button type="button" class="btn btn-danger btn-compact delete-subscription-btn" data-id="${sub.id}">删除</button>
       </div>
     </article>
