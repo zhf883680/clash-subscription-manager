@@ -68,7 +68,7 @@ docker build -t zhf883680/clash-subscription-manager:latest .
 运行容器：
 
 ```bash
-docker run --rm -p 8080:8080 \
+docker run -d --name clashManage  -p 8080:8080 \
   -v $(pwd)/data:/app/data \
   zhf883680/clash-subscription-manager:latest
 ```
