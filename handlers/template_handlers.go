@@ -8,7 +8,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -249,19 +248,19 @@ func selectTemplateSubscriptions(item *models.Template, subscriptions []models.S
 		return []models.Subscription{}
 	}
 
-	selected := make(map[string]struct{}, len(item.SelectedSubscriptionIDs))
+	byID := make(map[string]models.Subscription, len(subscriptions))
+	for _, s := range subscriptions {
+		byID[s.ID] = s
+	}
+
+	filtered := make([]models.Subscription, 0, len(item.SelectedSubscriptionIDs))
 	for _, id := range item.SelectedSubscriptionIDs {
 		id = strings.TrimSpace(id)
 		if id == "" {
 			continue
 		}
-		selected[id] = struct{}{}
-	}
-
-	filtered := make([]models.Subscription, 0, len(selected))
-	for _, subscription := range subscriptions {
-		if _, ok := selected[subscription.ID]; ok {
-			filtered = append(filtered, subscription)
+		if s, ok := byID[id]; ok {
+			filtered = append(filtered, s)
 		}
 	}
 	return filtered
@@ -308,10 +307,6 @@ func renderProxyProvidersBlock(providers []templateProvider) string {
 	if len(providers) == 0 {
 		return "proxy-providers: {}\n"
 	}
-
-	sort.SliceStable(providers, func(i, j int) bool {
-		return providers[i].Name < providers[j].Name
-	})
 
 	var builder strings.Builder
 	builder.WriteString("proxy-providers:\n")

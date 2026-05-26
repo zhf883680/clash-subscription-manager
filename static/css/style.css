@@ -789,14 +789,40 @@ a {
 
 .template-subscription-option {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: flex-start;
   padding: 14px;
   border-radius: var(--radius-md);
   border: 1px solid rgba(120, 185, 255, 0.08);
   background: rgba(8, 20, 36, 0.8);
+  cursor: default;
+}
+
+.template-subscription-check {
   cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.template-subscription-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.template-subscription-reorder .btn {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  line-height: 1;
+  min-width: 28px;
+  text-align: center;
+  opacity: 0.5;
+}
+
+.template-subscription-option:hover .template-subscription-reorder .btn {
+  opacity: 1;
 }
 
 .template-subscription-option input {
