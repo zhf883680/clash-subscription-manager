@@ -734,6 +734,137 @@ func writeTemplateTestFile(t *testing.T, path string, data []byte) {
 	}
 }
 
+func TestRenderTemplateHandlerUsesCustomSubscriptionPrefix(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-west",
+			Name:      "🛫 West",
+			URL:       "https://example.com/west",
+			FilePath:  "west-source.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+		{
+			ID:        "sub-ai",
+			Name:      "✨ AI Select",
+			URL:       "https://example.com/ai",
+			FilePath:  "ai-source.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json")); err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	templateRecord, err := AddTemplate(models.Template{
+		Name: "custom-prefix",
+		Content: strings.TrimSpace(`
+proxy-providers: {}
+rules:
+  - MATCH,DIRECT
+`) + "\n",
+		SubscriptionPrefixes: map[string]string{
+			"sub-west": "Custom HK |",
+			"sub-ai":   "My AI Nodes |",
+		},
+		UpdatedAt: time.Now(),
+		IsDefault: true,
+	}, filepath.Join(dataDir, "templates.json"))
+	if err != nil {
+		t.Fatalf("AddTemplate() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     4096,
+		DownloadTimeout: 0,
+		RateLimit:       10,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/templates/"+templateRecord.ID+"/render", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": templateRecord.ID})
+	rec := httptest.NewRecorder()
+
+	handler.RenderTemplateHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"Custom HK |"`) {
+		t.Fatalf("body should use custom prefix for sub-west: %s", body)
+	}
+	if !strings.Contains(body, `"My AI Nodes |"`) {
+		t.Fatalf("body should use custom prefix for sub-ai: %s", body)
+	}
+	if strings.Contains(body, `"West |"`) {
+		t.Fatalf("body should not contain default prefix for sub-west: %s", body)
+	}
+	if strings.Contains(body, `"AI Select |"`) {
+		t.Fatalf("body should not contain default prefix for sub-ai: %s", body)
+	}
+}
+
+func TestRenderTemplateHandlerFallsBackToDefaultPrefixWhenCustomIsEmpty(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if err := SaveSubscriptions([]models.Subscription{
+		{
+			ID:        "sub-west",
+			Name:      "West",
+			URL:       "https://example.com/west",
+			FilePath:  "west-source.yaml",
+			Type:      "clash",
+			UpdatedAt: time.Now(),
+			Status:    "active",
+		},
+	}, filepath.Join(dataDir, "subscriptions.json")); err != nil {
+		t.Fatalf("SaveSubscriptions() error = %v", err)
+	}
+
+	templateRecord, err := AddTemplate(models.Template{
+		Name: "fallback-prefix",
+		Content: strings.TrimSpace(`
+proxy-providers: {}
+rules:
+  - MATCH,DIRECT
+`) + "\n",
+		SubscriptionPrefixes: map[string]string{
+			"sub-west": "   ",
+		},
+		UpdatedAt: time.Now(),
+		IsDefault: true,
+	}, filepath.Join(dataDir, "templates.json"))
+	if err != nil {
+		t.Fatalf("AddTemplate() error = %v", err)
+	}
+
+	handler := NewHandler(&Config{
+		DataDir:         dataDir,
+		MaxFileSize:     4096,
+		DownloadTimeout: 0,
+		RateLimit:       10,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/templates/"+templateRecord.ID+"/render", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": templateRecord.ID})
+	rec := httptest.NewRecorder()
+
+	handler.RenderTemplateHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"West |"`) {
+		t.Fatalf("body should fall back to default prefix when custom is whitespace: %s", body)
+	}
+}
+
 func TestListTemplatesHandlerReturnsSavedTemplates(t *testing.T) {
 	dataDir := t.TempDir()
 	if _, err := AddTemplate(models.Template{

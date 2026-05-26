@@ -601,31 +601,6 @@ function populateTemplateForm(t) {
   if (deleteBtn) deleteBtn.style.display = t.id ? "" : "none";
 }
 
-function getOrderedSubscriptions(template) {
-  const useAll = template?.use_all_subscriptions === true;
-  const orderedIds = template?.selected_subscription_ids || [];
-
-  if (useAll) {
-    return [...subscriptions];
-  }
-
-  const byId = {};
-  for (const s of subscriptions) byId[s.id] = s;
-
-  const ordered = [];
-  const seen = new Set();
-  for (const id of orderedIds) {
-    if (byId[id]) {
-      ordered.push(byId[id]);
-      seen.add(id);
-    }
-  }
-  for (const s of subscriptions) {
-    if (!seen.has(s.id)) ordered.push(s);
-  }
-  return ordered;
-}
-
 function renderTemplateSubscriptionOptions(template) {
   const container = document.getElementById("template-subscription-options");
   if (!container) return;
@@ -637,56 +612,22 @@ function renderTemplateSubscriptionOptions(template) {
 
   const useAll = template?.use_all_subscriptions === true;
   const selected = new Set(template?.selected_subscription_ids || []);
-  const ordered = getOrderedSubscriptions(template);
+  const prefixes = template?.subscription_prefixes || {};
 
-  container.innerHTML = ordered
+  container.innerHTML = subscriptions
     .map(
       (sub) => `
-    <div class="template-subscription-option" data-id="${sub.id}">
-      <label class="template-subscription-check">
-        <input type="checkbox" name="template-subs" value="${sub.id}" ${useAll || selected.has(sub.id) ? "checked" : ""}>
-      </label>
-      <div class="template-subscription-copy">
+    <label class="template-subscription-option" data-id="${sub.id}">
+      <input type="checkbox" name="template-subs" value="${sub.id}" ${useAll || selected.has(sub.id) ? "checked" : ""}>
+      <div class="template-subscription-info">
         <strong>${escapeHtml(sub.name)}</strong>
         <span>${escapeHtml(sub.url)}</span>
       </div>
-      <div class="template-subscription-reorder">
-        <button type="button" class="btn btn-ghost btn-compact reorder-up-btn" data-id="${sub.id}" title="上移">&#9650;</button>
-        <button type="button" class="btn btn-ghost btn-compact reorder-down-btn" data-id="${sub.id}" title="下移">&#9660;</button>
-      </div>
-    </div>
+      <input type="text" class="template-prefix-input" name="template-prefix-${sub.id}" value="${escapeHtml(prefixes[sub.id] || "")}" placeholder="自定义前缀" title="自定义 additional-prefix，留空使用默认">
+    </label>
   `
     )
     .join("");
-
-  container.querySelectorAll(".reorder-up-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      reorderSubscriptionOption(btn.dataset.id, -1);
-    });
-  });
-  container.querySelectorAll(".reorder-down-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      reorderSubscriptionOption(btn.dataset.id, 1);
-    });
-  });
-}
-
-function reorderSubscriptionOption(id, direction) {
-  const container = document.getElementById("template-subscription-options");
-  if (!container) return;
-  const items = Array.from(container.querySelectorAll(".template-subscription-option"));
-  const index = items.findIndex((el) => el.dataset.id === id);
-  if (index < 0) return;
-  const newIndex = index + direction;
-  if (newIndex < 0 || newIndex >= items.length) return;
-
-  if (direction === -1) {
-    container.insertBefore(items[index], items[newIndex]);
-  } else {
-    container.insertBefore(items[index], items[newIndex].nextSibling);
-  }
 }
 
 // ── Template Form ────────────────────────────────────────────────────────────
@@ -769,11 +710,20 @@ function initTemplateForm() {
         ? []
         : Array.from(form.querySelectorAll('input[name="template-subs"]:checked')).map((c) => c.value);
 
+      const subscriptionPrefixes = {};
+      form.querySelectorAll(".template-prefix-input").forEach((input) => {
+        const subId = input.name.replace("template-prefix-", "");
+        if (input.value.trim()) {
+          subscriptionPrefixes[subId] = input.value.trim();
+        }
+      });
+
       const payload = {
         name: fd.get("name"),
         content: fd.get("content"),
         use_all_subscriptions: useAll,
         selected_subscription_ids: selectedIds,
+        subscription_prefixes: subscriptionPrefixes,
       };
 
       const id = fd.get("id");

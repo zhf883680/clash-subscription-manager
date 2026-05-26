@@ -20,10 +20,11 @@ import (
 )
 
 type templatePayload struct {
-	Name                    string   `json:"name"`
-	Content                 string   `json:"content"`
-	SelectedSubscriptionIDs []string `json:"selected_subscription_ids"`
-	UseAllSubscriptions     *bool    `json:"use_all_subscriptions"`
+	Name                    string            `json:"name"`
+	Content                 string            `json:"content"`
+	SelectedSubscriptionIDs []string          `json:"selected_subscription_ids"`
+	UseAllSubscriptions     *bool             `json:"use_all_subscriptions"`
+	SubscriptionPrefixes    map[string]string `json:"subscription_prefixes"`
 }
 
 func (h *Handler) ListTemplatesHandler(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +84,7 @@ func (h *Handler) TemplateHandler(w http.ResponseWriter, r *http.Request) {
 			template.Content = payload.Content
 			template.SelectedSubscriptionIDs = payload.SelectedSubscriptionIDs
 			template.UseAllSubscriptions = payload.UseAllSubscriptions
+			template.SubscriptionPrefixes = payload.SubscriptionPrefixes
 			return nil
 		})
 		if err != nil {
@@ -179,6 +181,7 @@ func (h *Handler) createTemplate(w http.ResponseWriter, r *http.Request) {
 		Content:                 payload.Content,
 		SelectedSubscriptionIDs: payload.SelectedSubscriptionIDs,
 		UseAllSubscriptions:     payload.UseAllSubscriptions,
+		SubscriptionPrefixes:    payload.SubscriptionPrefixes,
 		UpdatedAt:               time.Now(),
 	}, filepath.Join(h.config.DataDir, "templates.json"))
 	if err != nil {
@@ -235,7 +238,7 @@ func (h *Handler) renderTemplateContent(r *http.Request, item *models.Template, 
 		rendered = replaceYAMLSection(item.Content, "proxy-providers", "")
 		rendered = replaceYAMLSection(rendered, "proxies", proxiesBlock)
 	default:
-		rendered = replaceYAMLSection(item.Content, "proxy-providers", renderProxyProvidersBlock(h.buildTemplateProviders(r, subscriptions)))
+			rendered = replaceYAMLSection(item.Content, "proxy-providers", renderProxyProvidersBlock(h.buildTemplateProviders(r, subscriptions, item.SubscriptionPrefixes)))
 	}
 	return []byte(rendered), nil
 }
@@ -274,7 +277,7 @@ func (h *Handler) renderExpandedProxiesBlock(subscriptions []models.Subscription
 	return renderProxiesBlock(proxies)
 }
 
-func (h *Handler) buildTemplateProviders(r *http.Request, subscriptions []models.Subscription) []templateProvider {
+func (h *Handler) buildTemplateProviders(r *http.Request, subscriptions []models.Subscription, prefixes map[string]string) []templateProvider {
 	providers := make([]templateProvider, 0, len(subscriptions))
 	for _, subscription := range subscriptions {
 		if subscription.ID == "" {
@@ -284,12 +287,18 @@ func (h *Handler) buildTemplateProviders(r *http.Request, subscriptions []models
 		if fileName == "" {
 			fileName = sanitizeFilename(subscription.Name) + ".yaml"
 		}
+
+		prefix := sanitizeProviderLabel(subscription.Name) + " |"
+		if custom, ok := prefixes[subscription.ID]; ok && strings.TrimSpace(custom) != "" {
+			prefix = strings.TrimSpace(custom)
+		}
+
 		providers = append(providers, templateProvider{
 			Name:             subscription.Name,
 			URL:              absoluteDownloadURL(r, subscription.ID),
 			Path:             "./proxies/" + path.Base(fileName),
 			Filter:           strings.TrimSpace(subscription.Filter),
-			AdditionalPrefix: sanitizeProviderLabel(subscription.Name) + " |",
+			AdditionalPrefix: prefix,
 		})
 	}
 	return providers
