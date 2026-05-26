@@ -601,6 +601,31 @@ function populateTemplateForm(t) {
   if (deleteBtn) deleteBtn.style.display = t.id ? "" : "none";
 }
 
+function getOrderedSubscriptions(template) {
+  const useAll = template?.use_all_subscriptions === true;
+  const orderedIds = template?.selected_subscription_ids || [];
+
+  if (useAll) {
+    return [...subscriptions];
+  }
+
+  const byId = {};
+  for (const s of subscriptions) byId[s.id] = s;
+
+  const ordered = [];
+  const seen = new Set();
+  for (const id of orderedIds) {
+    if (byId[id]) {
+      ordered.push(byId[id]);
+      seen.add(id);
+    }
+  }
+  for (const s of subscriptions) {
+    if (!seen.has(s.id)) ordered.push(s);
+  }
+  return ordered;
+}
+
 function renderTemplateSubscriptionOptions(template) {
   const container = document.getElementById("template-subscription-options");
   if (!container) return;
@@ -612,20 +637,56 @@ function renderTemplateSubscriptionOptions(template) {
 
   const useAll = template?.use_all_subscriptions === true;
   const selected = new Set(template?.selected_subscription_ids || []);
+  const ordered = getOrderedSubscriptions(template);
 
-  container.innerHTML = subscriptions
+  container.innerHTML = ordered
     .map(
       (sub) => `
-    <label class="template-subscription-option">
-      <input type="checkbox" name="template-subs" value="${sub.id}" ${useAll || selected.has(sub.id) ? "checked" : ""}>
+    <div class="template-subscription-option" data-id="${sub.id}">
+      <label class="template-subscription-check">
+        <input type="checkbox" name="template-subs" value="${sub.id}" ${useAll || selected.has(sub.id) ? "checked" : ""}>
+      </label>
       <div class="template-subscription-copy">
         <strong>${escapeHtml(sub.name)}</strong>
         <span>${escapeHtml(sub.url)}</span>
       </div>
-    </label>
+      <div class="template-subscription-reorder">
+        <button type="button" class="btn btn-ghost btn-compact reorder-up-btn" data-id="${sub.id}" title="上移">&#9650;</button>
+        <button type="button" class="btn btn-ghost btn-compact reorder-down-btn" data-id="${sub.id}" title="下移">&#9660;</button>
+      </div>
+    </div>
   `
     )
     .join("");
+
+  container.querySelectorAll(".reorder-up-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      reorderSubscriptionOption(btn.dataset.id, -1);
+    });
+  });
+  container.querySelectorAll(".reorder-down-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      reorderSubscriptionOption(btn.dataset.id, 1);
+    });
+  });
+}
+
+function reorderSubscriptionOption(id, direction) {
+  const container = document.getElementById("template-subscription-options");
+  if (!container) return;
+  const items = Array.from(container.querySelectorAll(".template-subscription-option"));
+  const index = items.findIndex((el) => el.dataset.id === id);
+  if (index < 0) return;
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= items.length) return;
+
+  if (direction === -1) {
+    container.insertBefore(items[index], items[newIndex]);
+  } else {
+    container.insertBefore(items[index], items[newIndex].nextSibling);
+  }
 }
 
 // ── Template Form ────────────────────────────────────────────────────────────
