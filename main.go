@@ -17,7 +17,7 @@ import (
 )
 
 // Version is the application version, set via ldflags during build
-var Version = "v1.0.13"
+var Version = "v1.0.17"
 
 type Config struct {
 	Port              int           `yaml:"port"`
