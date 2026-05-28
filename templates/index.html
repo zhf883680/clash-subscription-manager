@@ -122,8 +122,14 @@
 
                                 <div class="template-form-actions sticky-actions">
                                     <button type="submit" id="template-submit-btn" class="btn btn-primary">保存模板</button>
-                                    <button type="button" id="copy-template-url-btn" class="btn btn-ghost">复制模板地址</button>
-                                    <button type="button" id="copy-expanded-template-url-btn" class="btn btn-ghost">复制全节点地址</button>
+                                    <div class="copy-dropdown-wrapper">
+                                        <button type="button" id="copy-dropdown-toggle" class="btn btn-ghost">复制地址 ▾</button>
+                                        <div id="copy-dropdown-menu" class="copy-dropdown-menu hidden">
+                                            <button type="button" class="copy-dropdown-item" data-copy="providers">复制模板地址</button>
+                                            <button type="button" class="copy-dropdown-item" data-copy="proxies">复制全节点地址</button>
+                                            <button type="button" class="copy-dropdown-item" data-copy="nodes">复制非Clash模式</button>
+                                        </div>
+                                    </div>
                                     <button type="button" id="delete-template-btn" class="btn btn-danger">删除模板</button>
                                 </div>
                             </div>

@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"clash-subscription-manager/converter"
 	"clash-subscription-manager/models"
 
 	"github.com/gorilla/mux"
@@ -166,6 +167,33 @@ func (h *Handler) RenderDefaultTemplateProxiesHandler(w http.ResponseWriter, r *
 	h.writeRenderedTemplate(w, r, item, templateRenderModeProxies)
 }
 
+func (h *Handler) RenderTemplateNodeLinksHandler(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	item, err := GetTemplate(id, filepath.Join(h.config.DataDir, "templates.json"))
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Template not found: %v", err),
+		})
+		return
+	}
+
+	h.writeRenderedTemplate(w, r, item, templateRenderModeNodeLinks)
+}
+
+func (h *Handler) RenderDefaultTemplateNodeLinksHandler(w http.ResponseWriter, r *http.Request) {
+	item, err := GetDefaultTemplate(filepath.Join(h.config.DataDir, "templates.json"))
+	if err != nil {
+		h.respondJSON(w, http.StatusNotFound, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Default template not found: %v", err),
+		})
+		return
+	}
+
+	h.writeRenderedTemplate(w, r, item, templateRenderModeNodeLinks)
+}
+
 func (h *Handler) createTemplate(w http.ResponseWriter, r *http.Request) {
 	payload, err := decodeTemplatePayload(r)
 	if err != nil {
@@ -209,8 +237,12 @@ func (h *Handler) writeRenderedTemplate(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.yaml\"", sanitizeFilename(item.Name)))
+	if mode == templateRenderModeNodeLinks {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	} else {
+		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.yaml\"", sanitizeFilename(item.Name)))
+	}
 	_, _ = w.Write(rendered)
 }
 
@@ -219,6 +251,7 @@ type templateRenderMode string
 const (
 	templateRenderModeProviders templateRenderMode = "providers"
 	templateRenderModeProxies   templateRenderMode = "proxies"
+	templateRenderModeNodeLinks templateRenderMode = "nodes"
 )
 
 func (h *Handler) renderTemplateContent(r *http.Request, item *models.Template, mode templateRenderMode) ([]byte, error) {
@@ -237,8 +270,10 @@ func (h *Handler) renderTemplateContent(r *http.Request, item *models.Template, 
 		}
 		rendered = replaceYAMLSection(item.Content, "proxy-providers", "")
 		rendered = replaceYAMLSection(rendered, "proxies", proxiesBlock)
+	case templateRenderModeNodeLinks:
+		return h.renderNodeLinks(subscriptions)
 	default:
-			rendered = replaceYAMLSection(item.Content, "proxy-providers", renderProxyProvidersBlock(h.buildTemplateProviders(r, subscriptions, item.SubscriptionPrefixes)))
+		rendered = replaceYAMLSection(item.Content, "proxy-providers", renderProxyProvidersBlock(h.buildTemplateProviders(r, subscriptions, item.SubscriptionPrefixes)))
 	}
 	return []byte(rendered), nil
 }
@@ -275,6 +310,47 @@ func (h *Handler) renderExpandedProxiesBlock(subscriptions []models.Subscription
 		return "", err
 	}
 	return renderProxiesBlock(proxies)
+}
+
+func (h *Handler) renderNodeLinks(subscriptions []models.Subscription) ([]byte, error) {
+	var allNodes []*converter.ProxyNode
+	for _, sub := range subscriptions {
+		if sub.FilePath == "" {
+			continue
+		}
+
+		var matcher *regexp.Regexp
+		filter := strings.TrimSpace(sub.Filter)
+		if filter != "" {
+			compiled, err := regexp.Compile(filter)
+			if err != nil {
+				return nil, fmt.Errorf("compile filter for subscription %q: %w", sub.Name, err)
+			}
+			matcher = compiled
+		}
+
+		filePath := filepath.Join(h.config.DataDir, sub.FilePath)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("read subscription file for %q: %w", sub.Name, err)
+		}
+
+		nodes, err := converter.ParseClashProxies(data)
+		if err != nil {
+			continue
+		}
+
+		for _, node := range nodes {
+			if matcher != nil {
+				if node.Name == "" || !matcher.MatchString(node.Name) {
+					continue
+				}
+			}
+			allNodes = append(allNodes, node)
+		}
+	}
+
+	return converter.BuildNodeLinks(allNodes)
 }
 
 func (h *Handler) buildTemplateProviders(r *http.Request, subscriptions []models.Subscription, prefixes map[string]string) []templateProvider {

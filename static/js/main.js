@@ -761,6 +761,36 @@ function initTemplateForm() {
     else showToast("请先选择一个模板", true);
   });
 
+  // Copy dropdown
+  const copyToggle = document.getElementById("copy-dropdown-toggle");
+  const copyMenu = document.getElementById("copy-dropdown-menu");
+  if (copyToggle && copyMenu) {
+    copyToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      copyMenu.classList.toggle("hidden");
+    });
+
+    copyMenu.querySelectorAll(".copy-dropdown-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        if (!currentTemplateId) {
+          showToast("请先选择一个模板", true);
+          copyMenu.classList.add("hidden");
+          return;
+        }
+        const mode = item.dataset.copy;
+        const paths = {
+          providers: `/api/templates/${currentTemplateId}/render`,
+          proxies: `/api/templates/${currentTemplateId}/render-proxies`,
+          nodes: `/api/templates/${currentTemplateId}/render-nodes`,
+        };
+        copyToClipboard(`${location.origin}${paths[mode]}`);
+        copyMenu.classList.add("hidden");
+      });
+    });
+
+    document.addEventListener("click", () => copyMenu.classList.add("hidden"));
+  }
+
   document.getElementById("delete-template-btn")?.addEventListener("click", async () => {
     if (!currentTemplateId) return;
     if (!confirm("确定要删除这个模板吗？")) return;

@@ -17,7 +17,7 @@ import (
 )
 
 // Version is the application version, set via ldflags during build
-var Version = "v1.0.17"
+var Version = "v1.0.18"
 
 type Config struct {
 	Port              int           `yaml:"port"`
@@ -142,6 +142,8 @@ func newRouter(h *handlers.Handler) http.Handler {
 	api.HandleFunc("/templates/{id}", h.TemplateHandler).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
 	api.HandleFunc("/templates/{id}/render", h.RenderTemplateHandler).Methods(http.MethodGet)
 	api.HandleFunc("/templates/{id}/render-proxies", h.RenderTemplateProxiesHandler).Methods(http.MethodGet)
+	api.HandleFunc("/templates/default/render-nodes", h.RenderDefaultTemplateNodeLinksHandler).Methods(http.MethodGet)
+	api.HandleFunc("/templates/{id}/render-nodes", h.RenderTemplateNodeLinksHandler).Methods(http.MethodGet)
 
 	router.HandleFunc("/download/{id}", h.RateLimit(h.DownloadHandler)).Methods(http.MethodGet)
 	router.HandleFunc("/health", h.HealthHandler).Methods(http.MethodGet)
