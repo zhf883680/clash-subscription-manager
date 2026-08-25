@@ -412,7 +412,7 @@ func renderProxyProvidersBlock(providers []templateProvider) string {
 		builder.WriteString("    health-check:\n")
 		builder.WriteString("      enable: true\n")
 		builder.WriteString("      url: https://cp.cloudflare.com\n")
-		builder.WriteString("      interval: 600\n")
+		builder.WriteString("      interval: 300\n")
 		builder.WriteString("    override:\n")
 		builder.WriteString("      ip-version: ipv4\n")
 		builder.WriteString("      additional-prefix: ")
